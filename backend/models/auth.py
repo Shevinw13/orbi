@@ -38,6 +38,23 @@ class AuthResponse(BaseModel):
     user_id: str
 
 
+class EmailRegisterRequest(BaseModel):
+    """POST /auth/register request body."""
+
+    email: str | None = Field(None, description="User email address (optional if username provided)")
+    username: str | None = Field(None, description="Username (optional if email provided)")
+    password: str = Field(..., min_length=6, description="Password (min 6 chars)")
+    name: str | None = Field(None, description="User's display name")
+
+
+class EmailLoginRequest(BaseModel):
+    """POST /auth/login request body."""
+
+    email: str | None = Field(None, description="User email address")
+    username: str | None = Field(None, description="Username")
+    password: str = Field(..., description="User password")
+
+
 class ErrorResponse(BaseModel):
     """Structured error response (Req 14.4)."""
 

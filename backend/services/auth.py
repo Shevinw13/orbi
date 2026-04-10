@@ -297,6 +297,90 @@ async def google_sign_in(id_token: str) -> dict[str, Any]:
     }
 
 
+# ---------------------------------------------------------------------------
+# Email/Password auth
+# ---------------------------------------------------------------------------
+
+
+def hash_password(password: str) -> str:
+    """Hash a password with bcrypt."""
+    salt = bcrypt.gensalt(rounds=BCRYPT_COST_FACTOR)
+    return bcrypt.hashpw(password.encode(), salt).decode()
+
+
+def verify_password(password: str, password_hash: str) -> bool:
+    """Verify a password against its bcrypt hash."""
+    return bcrypt.checkpw(password.encode(), password_hash.encode())
+
+
+async def email_register(email: str, password: str, name: str | None = None, username: str | None = None) -> dict[str, Any]:
+    """Register a new user with email/username and password."""
+    sb = _get_supabase()
+
+    if not email and not username:
+        raise ValueError("Either email or username is required")
+
+    # Check for existing user
+    if email:
+        result = sb.table("users").select("*").eq("email", email).execute()
+        if result.data:
+            raise ValueError("An account with this email already exists")
+
+    new_user = {
+        "email": email,
+        "name": name or (email.split("@")[0] if email else "User"),
+        "auth_provider": "email",
+        "password_hash": hash_password(password),
+    }
+    insert_result = sb.table("users").insert(new_user).execute()
+    user = insert_result.data[0]
+
+    access_token, expires_in = create_access_token(user["id"])
+    raw_refresh, refresh_expires = create_refresh_token(user["id"])
+    await _store_refresh_token(user["id"], raw_refresh, refresh_expires)
+
+    return {
+        "access_token": access_token,
+        "refresh_token": raw_refresh,
+        "token_type": "bearer",
+        "expires_in": expires_in,
+        "user_id": user["id"],
+    }
+
+
+async def email_login(email: str | None, password: str, username: str | None = None) -> dict[str, Any]:
+    """Authenticate with email or username and password."""
+    sb = _get_supabase()
+
+    if not email and not username:
+        raise ValueError("Either email or username is required")
+
+    if email:
+        result = sb.table("users").select("*").eq("email", email).execute()
+    else:
+        result = sb.table("users").select("*").eq("username", username).execute()
+
+    if not result.data:
+        raise ValueError("Invalid credentials")
+
+    user = result.data[0]
+    stored_hash = user.get("password_hash")
+    if not stored_hash or not verify_password(password, stored_hash):
+        raise ValueError("Invalid credentials")
+
+    access_token, expires_in = create_access_token(user["id"])
+    raw_refresh, refresh_expires = create_refresh_token(user["id"])
+    await _store_refresh_token(user["id"], raw_refresh, refresh_expires)
+
+    return {
+        "access_token": access_token,
+        "refresh_token": raw_refresh,
+        "token_type": "bearer",
+        "expires_in": expires_in,
+        "user_id": user["id"],
+    }
+
+
 async def refresh_access_token(raw_refresh_token: str) -> dict[str, Any]:
     """Exchange a valid refresh token for a new access token.
 

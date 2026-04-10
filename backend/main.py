@@ -47,4 +47,29 @@ app.include_router(search_router)
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok"}
+    from backend.services.cache import get_redis_client
+
+    # Cache backend status
+    redis_client = get_redis_client()
+    if redis_client is not None:
+        try:
+            redis_client.ping()
+            cache_status = "redis_connected"
+        except Exception:
+            cache_status = "redis_error_inmemory_fallback"
+    else:
+        cache_status = "in_memory"
+
+    # Supabase connectivity check
+    try:
+        from supabase import create_client
+        client = create_client(settings.supabase_url, settings.supabase_key)
+        supabase_status = "configured"
+    except Exception:
+        supabase_status = "error"
+
+    return {
+        "status": "ok",
+        "cache_backend": cache_status,
+        "supabase": supabase_status,
+    }

@@ -29,6 +29,16 @@ final class MapRouteViewModel: ObservableObject {
 
     let dayNumber: Int
 
+    /// Total distance across all segments in meters.
+    var totalDistance: Double {
+        segments.reduce(0) { $0 + $1.distanceMeters }
+    }
+
+    /// Total travel time across all segments in minutes.
+    var totalTime: Int {
+        segments.reduce(0) { $0 + $1.travelTimeMinutes }
+    }
+
     init(day: ItineraryDay) {
         self.dayNumber = day.dayNumber
         self.slots = day.slots.filter { $0.latitude != 0 && $0.longitude != 0 }
@@ -73,7 +83,6 @@ final class MapRouteViewModel: ObservableObject {
                     computed.append(segment)
                 }
             } catch {
-                // Fall back to driving if walking fails
                 request.transportType = .automobile
                 let drivingDirections = MKDirections(request: request)
                 do {
@@ -108,10 +117,11 @@ final class MapRouteViewModel: ObservableObject {
     }
 }
 
+
 // MARK: - Map Route Polyline (UIKit overlay bridge)
 
 /// UIViewRepresentable that draws MKRoute polylines on an MKMapView.
-/// Validates: Requirement 6.2
+/// Validates: Requirement 6.2, 9.2, 9.3
 struct MapRouteOverlay: UIViewRepresentable {
 
     let slots: [ItinerarySlot]
@@ -131,17 +141,17 @@ struct MapRouteOverlay: UIViewRepresentable {
     }
 
     func updateUIView(_ mapView: MKMapView, context: Context) {
-        // Remove old overlays and annotations
         mapView.removeOverlays(mapView.overlays)
         mapView.removeAnnotations(mapView.annotations)
 
-        // Add pin annotations for each slot (Req 6.1)
-        for slot in slots {
+        // Add numbered pin annotations for each slot
+        for (index, slot) in slots.enumerated() {
             let annotation = SlotAnnotation(slot: slot)
+            annotation.stopNumber = index + 1
             mapView.addAnnotation(annotation)
         }
 
-        // Add route polylines (Req 6.2)
+        // Add route polylines with blue stroke
         for segment in segments {
             mapView.addOverlay(segment.route.polyline, level: .aboveRoads)
         }
@@ -192,7 +202,7 @@ struct MapRouteOverlay: UIViewRepresentable {
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             if let polyline = overlay as? MKPolyline {
                 let renderer = MKPolylineRenderer(polyline: polyline)
-                renderer.strokeColor = .systemOrange
+                renderer.strokeColor = UIColor(red: 0.2, green: 0.5, blue: 1.0, alpha: 1.0) // DesignTokens.accentBlue
                 renderer.lineWidth = 4
                 return renderer
             }
@@ -202,18 +212,44 @@ struct MapRouteOverlay: UIViewRepresentable {
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
             guard let slotAnnotation = annotation as? SlotAnnotation else { return nil }
 
-            let identifier = "SlotPin"
-            let view = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView
-                ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+            let identifier = "NumberedPin"
+            let view = mapView.dequeueReusableAnnotationView(withIdentifier: identifier)
+                ?? MKAnnotationView(annotation: annotation, reuseIdentifier: identifier)
 
             view.annotation = annotation
             view.canShowCallout = true
-            view.markerTintColor = markerColor(for: slotAnnotation.slot.timeSlot)
-            view.glyphImage = UIImage(systemName: "mappin")
+
+            // Create numbered circle view
+            let size: CGFloat = 32
+            let renderer = UIGraphicsImageRenderer(size: CGSize(width: size, height: size))
+            let image = renderer.image { ctx in
+                let rect = CGRect(origin: .zero, size: CGSize(width: size, height: size))
+                // Circle background with time-slot color
+                let color = markerColor(for: slotAnnotation.slot.timeSlot)
+                color.setFill()
+                ctx.cgContext.fillEllipse(in: rect)
+
+                // Number text
+                let number = "\(slotAnnotation.stopNumber)"
+                let attrs: [NSAttributedString.Key: Any] = [
+                    .font: UIFont.boldSystemFont(ofSize: 14),
+                    .foregroundColor: UIColor.white
+                ]
+                let textSize = (number as NSString).size(withAttributes: attrs)
+                let textRect = CGRect(
+                    x: (size - textSize.width) / 2,
+                    y: (size - textSize.height) / 2,
+                    width: textSize.width,
+                    height: textSize.height
+                )
+                (number as NSString).draw(in: textRect, withAttributes: attrs)
+            }
+
+            view.image = image
+            view.frame.size = CGSize(width: size, height: size)
             return view
         }
 
-        /// Req 6.4 — pin tap shows activity name and scheduled time via callout
         func mapView(_ mapView: MKMapView, didSelect annotation: MKAnnotation) {
             guard let slotAnnotation = annotation as? SlotAnnotation else { return }
             parent.selectedSlot.wrappedValue = slotAnnotation.slot
@@ -225,8 +261,8 @@ struct MapRouteOverlay: UIViewRepresentable {
 
         private func markerColor(for timeSlot: String) -> UIColor {
             switch timeSlot.lowercased() {
-            case "morning": return .systemOrange
-            case "afternoon": return .systemBlue
+            case "morning": return UIColor(red: 0.0, green: 0.85, blue: 0.95, alpha: 1.0)
+            case "afternoon": return UIColor(red: 0.2, green: 0.5, blue: 1.0, alpha: 1.0)
             case "evening": return .systemPurple
             default: return .systemGray
             }
@@ -238,18 +274,16 @@ struct MapRouteOverlay: UIViewRepresentable {
 // MARK: - Slot Annotation
 
 /// Custom MKAnnotation wrapping an ItinerarySlot for pin display.
-/// Validates: Requirements 6.1, 6.4
+/// Validates: Requirements 6.1, 6.4, 9.3
 final class SlotAnnotation: NSObject, MKAnnotation {
     let slot: ItinerarySlot
+    var stopNumber: Int = 0
 
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: slot.latitude, longitude: slot.longitude)
     }
 
-    /// Callout title shows activity name (Req 6.4)
     var title: String? { slot.activityName }
-
-    /// Callout subtitle shows scheduled time (Req 6.4)
     var subtitle: String? { slot.timeSlot }
 
     init(slot: ItinerarySlot) {
@@ -258,10 +292,11 @@ final class SlotAnnotation: NSObject, MKAnnotation {
     }
 }
 
+
 // MARK: - Map Route View
 
 /// Displays a day's activities as pins on a map with route polylines and segment details.
-/// Validates: Requirements 6.1, 6.2, 6.3, 6.4
+/// Validates: Requirements 6.1, 6.2, 6.3, 6.4, 9.2, 9.3, 9.5, 9.6
 struct MapRouteView: View {
 
     @StateObject private var viewModel: MapRouteViewModel
@@ -274,7 +309,7 @@ struct MapRouteView: View {
     var body: some View {
         NavigationStack {
             ZStack(alignment: .bottom) {
-                // Map with overlays (Req 6.1, 6.2)
+                // Map with overlays
                 MapRouteOverlay(
                     slots: viewModel.slots,
                     segments: viewModel.segments,
@@ -282,9 +317,12 @@ struct MapRouteView: View {
                 )
                 .ignoresSafeArea(edges: .bottom)
 
-                // Segment details panel (Req 6.3)
+                // Bottom panel: route summary + stop list
                 if !viewModel.segments.isEmpty {
-                    segmentDetailsPanel
+                    VStack(spacing: 0) {
+                        routeSummaryCard
+                        stopListView
+                    }
                 }
 
                 if viewModel.isLoading {
@@ -304,61 +342,113 @@ struct MapRouteView: View {
         }
     }
 
-    // MARK: - Segment Details Panel (Req 6.3)
+    // MARK: - Route Summary Card
 
-    private var segmentDetailsPanel: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
-                ForEach(viewModel.segments) { segment in
-                    segmentCard(segment)
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-        }
-        .background(.ultraThinMaterial)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Route segments")
-    }
-
-    private func segmentCard(_ segment: RouteSegment) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            // From → To
-            HStack(spacing: 4) {
-                Text(segment.from.activityName)
-                    .lineLimit(1)
-                Image(systemName: "arrow.right")
+    private var routeSummaryCard: some View {
+        HStack(spacing: DesignTokens.spacingLG) {
+            VStack(spacing: 4) {
+                Image(systemName: "map")
+                    .foregroundStyle(DesignTokens.accentCyan)
+                Text("Total Distance")
                     .font(.caption2)
-                Text(segment.to.activityName)
-                    .lineLimit(1)
+                    .foregroundStyle(DesignTokens.textSecondary)
+                Text(viewModel.formattedDistance(viewModel.totalDistance))
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(DesignTokens.textPrimary)
             }
-            .font(.caption.weight(.semibold))
 
             Divider()
+                .frame(height: 40)
+                .overlay(DesignTokens.surfaceGlassBorder)
 
-            // Transport type, time, distance
-            HStack(spacing: 8) {
-                Image(systemName: segment.transportType == .walking ? "figure.walk" : "car.fill")
-                    .foregroundStyle(.orange)
-                Text("\(segment.travelTimeMinutes) min")
-                    .font(.subheadline.weight(.medium))
-                Text("·")
-                    .foregroundStyle(.secondary)
-                Text(viewModel.formattedDistance(segment.distanceMeters))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+            VStack(spacing: 4) {
+                Image(systemName: "clock")
+                    .foregroundStyle(DesignTokens.accentCyan)
+                Text("Total Time")
+                    .font(.caption2)
+                    .foregroundStyle(DesignTokens.textSecondary)
+                Text("\(viewModel.totalTime) min")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(DesignTokens.textPrimary)
+            }
+
+            Divider()
+                .frame(height: 40)
+                .overlay(DesignTokens.surfaceGlassBorder)
+
+            VStack(spacing: 4) {
+                Image(systemName: "mappin.and.ellipse")
+                    .foregroundStyle(DesignTokens.accentCyan)
+                Text("Stops")
+                    .font(.caption2)
+                    .foregroundStyle(DesignTokens.textSecondary)
+                Text("\(viewModel.slots.count)")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(DesignTokens.textPrimary)
             }
         }
-        .padding(12)
-        .frame(minWidth: 200)
-        .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(0.1), radius: 4, y: 2)
+        .padding(DesignTokens.spacingMD)
+        .frame(maxWidth: .infinity)
+        .glassmorphic(cornerRadius: DesignTokens.radiusMD)
+        .padding(.horizontal, DesignTokens.spacingMD)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(
-            "From \(segment.from.activityName) to \(segment.to.activityName), " +
-            "\(segment.travelTimeMinutes) minutes \(segment.transportType == .walking ? "walking" : "driving"), " +
-            viewModel.formattedDistance(segment.distanceMeters)
-        )
+        .accessibilityLabel("Route summary: \(viewModel.formattedDistance(viewModel.totalDistance)), \(viewModel.totalTime) minutes, \(viewModel.slots.count) stops")
+    }
+
+    // MARK: - Stop List
+
+    private var stopListView: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: DesignTokens.spacingSM) {
+                ForEach(Array(viewModel.slots.enumerated()), id: \.element.id) { index, slot in
+                    stopCard(slot: slot, index: index)
+                }
+            }
+            .padding(.horizontal, DesignTokens.spacingMD)
+            .padding(.vertical, DesignTokens.spacingSM)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Route stops")
+    }
+
+    private func stopCard(slot: ItinerarySlot, index: Int) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Text("\(index + 1)")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 20, height: 20)
+                    .background(timeSlotColor(slot.timeSlot))
+                    .clipShape(Circle())
+                Text(slot.activityName)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(DesignTokens.textPrimary)
+                    .lineLimit(1)
+            }
+
+            if index < viewModel.segments.count {
+                let segment = viewModel.segments[index]
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.right")
+                        .font(.caption2)
+                    Text(viewModel.formattedDistance(segment.distanceMeters))
+                        .font(.caption2)
+                }
+                .foregroundStyle(DesignTokens.textSecondary)
+            }
+        }
+        .padding(DesignTokens.spacingSM)
+        .frame(minWidth: 140)
+        .glassmorphic(cornerRadius: DesignTokens.radiusSM)
+    }
+
+    private func timeSlotColor(_ timeSlot: String) -> Color {
+        switch timeSlot.lowercased() {
+        case "morning": return DesignTokens.accentCyan
+        case "afternoon": return DesignTokens.accentBlue
+        case "evening": return .purple
+        default: return .gray
+        }
     }
 
     // MARK: - Loading Overlay
@@ -368,13 +458,13 @@ struct MapRouteView: View {
             Color.black.opacity(0.3).ignoresSafeArea()
             VStack(spacing: 12) {
                 ProgressView()
-                    .tint(.orange)
+                    .tint(DesignTokens.accentCyan)
                 Text("Calculating routes…")
                     .font(.subheadline)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(DesignTokens.textPrimary)
             }
             .padding(24)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+            .glassmorphic(cornerRadius: DesignTokens.radiusMD)
         }
     }
 }

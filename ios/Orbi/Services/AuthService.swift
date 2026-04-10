@@ -73,6 +73,26 @@ final class AuthService: ObservableObject {
         await authenticate(path: "/auth/google", body: body)
     }
 
+    // MARK: - Email/Password Auth
+
+    func register(email: String?, password: String, name: String?, username: String? = nil) async {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        let body = EmailAuthRequest(email: email, username: username, password: password, name: name)
+        await authenticate(path: "/auth/register", body: body)
+    }
+
+    func login(email: String?, password: String, username: String? = nil) async {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        let body = EmailAuthRequest(email: email, username: username, password: password, name: nil)
+        await authenticate(path: "/auth/login", body: body)
+    }
+
     // MARK: - Sign Out
 
     func signOut() {

@@ -20,6 +20,7 @@
 		A10000011 /* SavedTripsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000011; };
 		A10000012 /* ShareTripView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000012; };
 		A10000013 /* TripResultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000013; };
+		A10000026 /* AppIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000026; };
 		A10000014 /* AuthModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000014; };
 		A10000015 /* DestinationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000015; };
 		A10000016 /* TripModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000016; };
@@ -29,6 +30,8 @@
 		A10000020 /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000020; };
 		A10000021 /* NetworkMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000021; };
 		A10000022 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B10000022; };
+		A10000023 /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000024; };
+		A10000024 /* GlassmorphicModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000025; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -46,6 +49,7 @@
 		B10000011 /* SavedTripsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedTripsView.swift; sourceTree = "<group>"; };
 		B10000012 /* ShareTripView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareTripView.swift; sourceTree = "<group>"; };
 		B10000013 /* TripResultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripResultView.swift; sourceTree = "<group>"; };
+		B10000026 /* AppIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIconView.swift; sourceTree = "<group>"; };
 		B10000014 /* AuthModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthModels.swift; sourceTree = "<group>"; };
 		B10000015 /* DestinationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DestinationModels.swift; sourceTree = "<group>"; };
 		B10000016 /* TripModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripModels.swift; sourceTree = "<group>"; };
@@ -56,6 +60,8 @@
 		B10000021 /* NetworkMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkMonitor.swift; sourceTree = "<group>"; };
 		B10000022 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B10000023 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B10000024 /* DesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokens.swift; sourceTree = "<group>"; };
+		B10000025 /* GlassmorphicModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassmorphicModifier.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -106,6 +112,7 @@
 				B10000011 /* SavedTripsView.swift */,
 				B10000012 /* ShareTripView.swift */,
 				B10000013 /* TripResultView.swift */,
+				B10000026 /* AppIconView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -133,6 +140,8 @@
 		D10000006 /* Utilities */ = {
 			isa = PBXGroup;
 			children = (
+				B10000024 /* DesignTokens.swift */,
+				B10000025 /* GlassmorphicModifier.swift */,
 				B10000020 /* KeychainHelper.swift */,
 				B10000021 /* NetworkMonitor.swift */,
 			);
@@ -237,6 +246,9 @@
 				A10000019 /* SearchService.swift in Sources */,
 				A10000020 /* KeychainHelper.swift in Sources */,
 				A10000021 /* NetworkMonitor.swift in Sources */,
+				A10000023 /* DesignTokens.swift in Sources */,
+				A10000024 /* GlassmorphicModifier.swift in Sources */,
+				A10000026 /* AppIconView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

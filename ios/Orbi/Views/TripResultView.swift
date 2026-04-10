@@ -76,18 +76,25 @@ struct TripResultView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                // Tab picker
-                tabPicker
+            ZStack {
+                DesignTokens.backgroundPrimary.ignoresSafeArea()
 
-                // Tab content
-                tabContent
+                VStack(spacing: 0) {
+                    // Header
+                    tripHeader
+
+                    // Tab picker
+                    tabPicker
+
+                    // Tab content
+                    tabContent
+                }
             }
-            .navigationTitle("\(itinerary.destination)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }
+                        .foregroundStyle(DesignTokens.textPrimary)
                 }
                 ToolbarItemGroup(placement: .primaryAction) {
                     // Share button (Req 10.1)
@@ -98,6 +105,8 @@ struct TripResultView: View {
                     saveButton
                 }
             }
+            .toolbarBackground(DesignTokens.backgroundPrimary, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .alert("Trip Saved!", isPresented: $showSaveSuccess) {
                 Button("OK", role: .cancel) {}
             } message: {
@@ -113,7 +122,6 @@ struct TripResultView: View {
                 recommendationsVM.onHotelSelectionChanged = { hotel in
                     guard let hotel else { return }
                     Task {
-                        // Estimate nightly rate from price level
                         let rate = estimateNightlyRate(priceLevel: hotel.priceLevel)
                         await costVM.recalculate(hotelNightlyRate: rate)
                     }
@@ -122,10 +130,24 @@ struct TripResultView: View {
         }
     }
 
+    // MARK: - Trip Header
+
+    private var tripHeader: some View {
+        VStack(spacing: 4) {
+            Text(itinerary.destination)
+                .font(.title2.weight(.bold))
+                .foregroundStyle(DesignTokens.textPrimary)
+            Text("\(itinerary.numDays) days · \(itinerary.vibe)")
+                .font(.subheadline)
+                .foregroundStyle(DesignTokens.textSecondary)
+        }
+        .padding(.vertical, DesignTokens.spacingSM)
+    }
+
     // MARK: - Tab Picker
 
     private var tabPicker: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: DesignTokens.spacingXS) {
             ForEach(TripResultTab.allCases) { tab in
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
@@ -140,19 +162,24 @@ struct TripResultView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 10)
-                    .foregroundStyle(selectedTab == tab ? .orange : .secondary)
+                    .foregroundStyle(selectedTab == tab ? DesignTokens.accentCyan : DesignTokens.textSecondary)
                     .background(
                         selectedTab == tab
-                            ? Color.orange.opacity(0.1)
-                            : Color.clear
+                            ? AnyShapeStyle(DesignTokens.accentCyan.opacity(0.15))
+                            : AnyShapeStyle(Color.clear)
                     )
+                    .clipShape(RoundedRectangle(cornerRadius: DesignTokens.radiusSM))
                 }
                 .accessibilityLabel("\(tab.rawValue) tab")
                 .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
             }
         }
-        .background(Color(.systemGroupedBackground))
+        .padding(.horizontal, DesignTokens.spacingMD)
+        .padding(.vertical, DesignTokens.spacingSM)
+        .glassmorphic(cornerRadius: DesignTokens.radiusMD)
+        .padding(.horizontal, DesignTokens.spacingMD)
     }
+
 
     // MARK: - Tab Content
 
@@ -255,12 +282,13 @@ struct TripResultView: View {
     private func estimateNightlyRate(priceLevel: String) -> Double {
         switch priceLevel {
         case "$": return 80
-        case "$$": return 150
-        case "$$$": return 250
+        case "$": return 150
+        case "$$": return 250
         default: return 100
         }
     }
 }
+
 
 
 // MARK: - Inline Day Section View
@@ -280,7 +308,7 @@ struct InlineDaySectionView: View {
 
             // Slots
             ForEach(Array(day.slots.enumerated()), id: \.element.id) { index, slot in
-                inlineSlotRow(slot: slot, isLast: index == day.slots.count - 1)
+                inlineSlotCard(slot: slot, isLast: index == day.slots.count - 1)
             }
 
             // Restaurant
@@ -298,8 +326,8 @@ struct InlineDaySectionView: View {
                     Text("Add Activity")
                 }
                 .font(.subheadline)
-                .foregroundStyle(.orange)
-                .padding(.horizontal, 16)
+                .foregroundStyle(DesignTokens.accentCyan)
+                .padding(.horizontal, DesignTokens.spacingMD)
                 .padding(.vertical, 10)
             }
             .accessibilityLabel("Add activity to Day \(day.dayNumber)")
@@ -312,50 +340,55 @@ struct InlineDaySectionView: View {
     private var daySectionHeader: some View {
         HStack {
             Image(systemName: "calendar")
-                .foregroundStyle(.orange)
+                .foregroundStyle(DesignTokens.accentCyan)
             Text("Day \(day.dayNumber)")
                 .font(.title3.weight(.bold))
+                .foregroundStyle(DesignTokens.textPrimary)
             Spacer()
             Button {
                 mapRouteDay = day
             } label: {
                 Label("Map", systemImage: "map")
                     .font(.caption.weight(.medium))
+                    .foregroundStyle(DesignTokens.accentCyan)
             }
             .accessibilityLabel("Show map route for Day \(day.dayNumber)")
             Text("\(day.slots.count) activities")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DesignTokens.textSecondary)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(Color(.systemGroupedBackground))
+        .padding(.horizontal, DesignTokens.spacingMD)
+        .padding(.vertical, DesignTokens.spacingSM)
+        .background(DesignTokens.backgroundSecondary)
     }
 
-    private func inlineSlotRow(slot: ItinerarySlot, isLast: Bool) -> some View {
+    private func inlineSlotCard(slot: ItinerarySlot, isLast: Bool) -> some View {
         HStack(alignment: .top, spacing: 12) {
+            // Timeline indicator
             VStack(spacing: 0) {
                 Circle()
                     .fill(timeSlotColor(slot.timeSlot))
                     .frame(width: 12, height: 12)
                 if !isLast {
                     Rectangle()
-                        .fill(Color(.systemGray4))
+                        .fill(DesignTokens.surfaceGlassBorder)
                         .frame(width: 2)
                         .frame(maxHeight: .infinity)
                 }
             }
             .frame(width: 12)
 
-            VStack(alignment: .leading, spacing: 4) {
+            // Activity card content
+            VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
                 Text(slot.timeSlot)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(timeSlotColor(slot.timeSlot))
                 Text(slot.activityName)
                     .font(.body.weight(.medium))
+                    .foregroundStyle(DesignTokens.textPrimary)
                 Text(slot.description)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DesignTokens.textSecondary)
                     .lineLimit(2)
 
                 HStack(spacing: 12) {
@@ -368,7 +401,7 @@ struct InlineDaySectionView: View {
                     }
                 }
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DesignTokens.textSecondary)
 
                 // Actions
                 HStack(spacing: 16) {
@@ -379,6 +412,7 @@ struct InlineDaySectionView: View {
                     } label: {
                         Label("Replace", systemImage: "arrow.triangle.2.circlepath")
                             .font(.caption2)
+                            .foregroundStyle(DesignTokens.accentCyan)
                     }
                     .disabled(viewModel.isReplacing)
 
@@ -391,11 +425,14 @@ struct InlineDaySectionView: View {
                 }
                 .padding(.top, 4)
             }
-            .padding(.vertical, 8)
+            .padding(DesignTokens.spacingSM)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .glassmorphic(cornerRadius: DesignTokens.radiusMD)
 
-            Spacer()
+            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, DesignTokens.spacingMD)
+        .padding(.vertical, DesignTokens.spacingXS)
         .contentShape(Rectangle())
         .onTapGesture {
             viewModel.selectedSlot = slot
@@ -406,35 +443,37 @@ struct InlineDaySectionView: View {
     private func inlineRestaurantRow(restaurant: ItineraryRestaurant) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: "fork.knife.circle.fill")
-                .foregroundStyle(.orange)
+                .foregroundStyle(DesignTokens.accentCyan)
                 .font(.title3)
                 .frame(width: 12)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Restaurant")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(DesignTokens.accentCyan)
                 Text(restaurant.name)
                     .font(.body.weight(.medium))
+                    .foregroundStyle(DesignTokens.textPrimary)
                 HStack(spacing: 8) {
                     Text(restaurant.cuisine)
                     Text(restaurant.priceLevel)
                     Label(String(format: "%.1f", restaurant.rating), systemImage: "star.fill")
+                        .foregroundStyle(.yellow)
                 }
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DesignTokens.textSecondary)
             }
             .padding(.vertical, 8)
 
             Spacer()
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, DesignTokens.spacingMD)
     }
 
     private func timeSlotColor(_ timeSlot: String) -> Color {
         switch timeSlot.lowercased() {
-        case "morning": return .orange
-        case "afternoon": return .blue
+        case "morning": return DesignTokens.accentCyan
+        case "afternoon": return DesignTokens.accentBlue
         case "evening": return .purple
         default: return .gray
         }
@@ -455,16 +494,16 @@ struct InlineDaySectionView: View {
                     ItinerarySlot(timeSlot: "Morning", activityName: "Tsukiji Outer Market", description: "Explore fresh seafood stalls and street food", latitude: 35.6654, longitude: 139.7707, estimatedDurationMin: 120, travelTimeToNextMin: 15, estimatedCostUsd: 20),
                     ItinerarySlot(timeSlot: "Afternoon", activityName: "Senso-ji Temple", description: "Visit Tokyo's oldest temple in Asakusa", latitude: 35.7148, longitude: 139.7967, estimatedDurationMin: 90, travelTimeToNextMin: 20, estimatedCostUsd: 0),
                 ],
-                restaurant: ItineraryRestaurant(name: "Sushi Dai", cuisine: "Sushi", priceLevel: "$$", rating: 4.7, latitude: 35.6655, longitude: 139.7710, imageUrl: nil)
+                restaurant: ItineraryRestaurant(name: "Sushi Dai", cuisine: "Sushi", priceLevel: "$", rating: 4.7, latitude: 35.6655, longitude: 139.7710, imageUrl: nil)
             ),
         ]
     )
     TripResultView(
         itinerary: sampleItinerary,
         city: CityMarker(name: "Tokyo", latitude: 35.6762, longitude: 139.6503),
-        hotelPriceRange: "$$",
+        hotelPriceRange: "$",
         hotelVibe: nil,
-        restaurantPriceRange: "$$",
+        restaurantPriceRange: "$",
         cuisineType: "Japanese"
     )
 }

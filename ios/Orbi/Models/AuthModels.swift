@@ -21,6 +21,14 @@ struct RefreshRequest: Encodable {
     let refreshToken: String
 }
 
+/// Email/username register/login request body.
+struct EmailAuthRequest: Encodable {
+    let email: String?
+    let username: String?
+    let password: String
+    let name: String?
+}
+
 // MARK: - Auth Response Model
 
 /// Successful authentication response from the backend.

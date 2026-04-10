@@ -61,9 +61,13 @@ actor APIClient {
 
     // MARK: - Configuration
 
-    /// Base URL for the backend API. Update for production.
+    /// Base URL for the backend API.
     #if DEBUG
+    #if targetEnvironment(simulator)
     private let baseURL = URL(string: "http://localhost:8000")!
+    #else
+    private let baseURL = URL(string: "http://10.0.0.36:8000")!  // Mac's local IP for physical device
+    #endif
     #else
     private let baseURL = URL(string: "https://api.orbi.app")!
     #endif

@@ -80,52 +80,68 @@ final class SavedTripsViewModel: ObservableObject {
     }
 }
 
+
 // MARK: - Saved Trips View
 
-/// "My Trips" screen listing all saved trips with load and delete actions.
-/// Validates: Requirements 9.2, 9.3, 9.4
+/// "My Trips" screen listing all saved trips in a 2-column grid with glassmorphic cards.
+/// Validates: Requirements 9.2, 9.3, 9.4, 11.1, 11.2, 11.3, 11.4
 struct SavedTripsView: View {
 
     @StateObject private var viewModel = SavedTripsViewModel()
     @Environment(\.dismiss) private var dismiss
 
+    private let columns = [
+        GridItem(.flexible(), spacing: DesignTokens.spacingMD),
+        GridItem(.flexible(), spacing: DesignTokens.spacingMD)
+    ]
+
     var body: some View {
         NavigationStack {
-            Group {
-                if viewModel.isLoading && viewModel.trips.isEmpty {
-                    ProgressView("Loading trips…")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let error = viewModel.errorMessage, viewModel.trips.isEmpty {
-                    VStack(spacing: 12) {
-                        Label(error, systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.red)
-                        Button("Retry") {
-                            Task { await viewModel.loadTrips() }
+            ZStack {
+                DesignTokens.backgroundPrimary.ignoresSafeArea()
+
+                Group {
+                    if viewModel.isLoading && viewModel.trips.isEmpty {
+                        ProgressView("Loading trips…")
+                            .tint(DesignTokens.accentCyan)
+                            .foregroundStyle(DesignTokens.textSecondary)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else if let error = viewModel.errorMessage, viewModel.trips.isEmpty {
+                        VStack(spacing: 12) {
+                            Label(error, systemImage: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.red.opacity(0.9))
+                            Button("Retry") {
+                                Task { await viewModel.loadTrips() }
+                            }
+                            .foregroundStyle(DesignTokens.accentCyan)
                         }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else if viewModel.trips.isEmpty {
+                        VStack(spacing: 12) {
+                            Image(systemName: "suitcase")
+                                .font(.system(size: 48))
+                                .foregroundStyle(DesignTokens.textSecondary)
+                            Text("No saved trips yet")
+                                .font(.headline)
+                                .foregroundStyle(DesignTokens.textSecondary)
+                            Text("Plan a trip from the globe and save it here.")
+                                .font(.subheadline)
+                                .foregroundStyle(DesignTokens.textTertiary)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        tripsGrid
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if viewModel.trips.isEmpty {
-                    VStack(spacing: 12) {
-                        Image(systemName: "suitcase")
-                            .font(.system(size: 48))
-                            .foregroundStyle(.secondary)
-                        Text("No saved trips yet")
-                            .font(.headline)
-                            .foregroundStyle(.secondary)
-                        Text("Plan a trip from the globe and save it here.")
-                            .font(.subheadline)
-                            .foregroundStyle(.tertiary)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    tripsList
                 }
             }
             .navigationTitle("My Trips")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(DesignTokens.backgroundPrimary, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }
+                        .foregroundStyle(DesignTokens.textPrimary)
                 }
             }
             .task {
@@ -149,22 +165,24 @@ struct SavedTripsView: View {
         }
     }
 
-    // MARK: - Trips List
+    // MARK: - Trips Grid
 
-    private var tripsList: some View {
-        List {
-            ForEach(viewModel.trips) { trip in
-                tripRow(trip)
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        Button(role: .destructive) {
-                            viewModel.confirmDelete(trip)
-                        } label: {
-                            Label("Delete", systemImage: "trash")
+    private var tripsGrid: some View {
+        ScrollView {
+            LazyVGrid(columns: columns, spacing: DesignTokens.spacingMD) {
+                ForEach(viewModel.trips) { trip in
+                    tripCard(trip)
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                viewModel.confirmDelete(trip)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
                         }
-                    }
+                }
             }
+            .padding(DesignTokens.spacingMD)
         }
-        .listStyle(.insetGrouped)
         .refreshable {
             await viewModel.loadTrips()
         }
@@ -173,52 +191,76 @@ struct SavedTripsView: View {
                 ZStack {
                     Color.black.opacity(0.3).ignoresSafeArea()
                     ProgressView("Loading trip…")
+                        .tint(DesignTokens.accentCyan)
+                        .foregroundStyle(DesignTokens.textPrimary)
                         .padding(24)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+                        .glassmorphic(cornerRadius: DesignTokens.radiusMD)
                 }
             }
         }
     }
 
-    private func tripRow(_ trip: TripListItem) -> some View {
+    private func tripCard(_ trip: TripListItem) -> some View {
         Button {
             Task { await viewModel.loadTrip(id: trip.id) }
         } label: {
-            HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: DesignTokens.spacingSM) {
+                // City image placeholder (gradient)
+                RoundedRectangle(cornerRadius: DesignTokens.radiusSM)
+                    .fill(
+                        LinearGradient(
+                            colors: [DesignTokens.accentCyan.opacity(0.3), DesignTokens.accentBlue.opacity(0.3)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(height: 100)
+                    .overlay(
+                        Image(systemName: "airplane")
+                            .font(.title)
+                            .foregroundStyle(DesignTokens.textSecondary)
+                    )
+
+                // Trip info
                 VStack(alignment: .leading, spacing: 4) {
                     Text(trip.destination)
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                    HStack(spacing: 8) {
-                        Label("\(trip.numDays) days", systemImage: "calendar")
-                        if let vibe = trip.vibe {
-                            Text("·")
-                            Text(vibe)
-                        }
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(DesignTokens.textPrimary)
+                        .lineLimit(1)
+
+                    HStack(spacing: 4) {
+                        Image(systemName: "calendar")
+                            .font(.caption2)
+                        Text("\(trip.numDays) days")
+                            .font(.caption)
                     }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DesignTokens.textSecondary)
+
+                    if let vibe = trip.vibe {
+                        Text(vibe)
+                            .font(.caption2)
+                            .foregroundStyle(DesignTokens.accentCyan)
+                    }
+
                     Text(formattedDate(trip.createdAt))
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(DesignTokens.textTertiary)
                 }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                .padding(.horizontal, DesignTokens.spacingSM)
+                .padding(.bottom, DesignTokens.spacingSM)
             }
-            .padding(.vertical, 4)
+            .glassmorphic(cornerRadius: DesignTokens.radiusMD)
         }
+        .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(trip.destination), \(trip.numDays) days")
-        .accessibilityHint("Tap to view trip details. Swipe left to delete.")
+        .accessibilityHint("Tap to view trip details. Long press for options.")
     }
 
     private func formattedDate(_ isoString: String) -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         guard let date = formatter.date(from: isoString) else {
-            // Try without fractional seconds
             formatter.formatOptions = [.withInternetDateTime]
             guard let date = formatter.date(from: isoString) else { return isoString }
             return formatDisplay(date)
@@ -247,10 +289,10 @@ struct SavedTripDetailView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    // Trip header
                     VStack(alignment: .leading, spacing: 6) {
                         Text(trip.destination)
                             .font(.title.weight(.bold))
+                            .foregroundStyle(DesignTokens.textPrimary)
                         HStack(spacing: 12) {
                             Label("\(trip.numDays) days", systemImage: "calendar")
                             if let vibe = trip.vibe {
@@ -258,36 +300,36 @@ struct SavedTripDetailView: View {
                             }
                         }
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(DesignTokens.textSecondary)
                     }
 
-                    Divider()
+                    Divider().overlay(DesignTokens.surfaceGlassBorder)
 
-                    // Itinerary summary
                     if trip.itinerary != nil {
                         Text("Itinerary saved with this trip.")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(DesignTokens.textSecondary)
                     } else {
                         Text("No itinerary data available.")
                             .font(.subheadline)
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(DesignTokens.textTertiary)
                     }
 
-                    // Cost summary
                     if trip.costBreakdown != nil {
                         Text("Cost breakdown saved with this trip.")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(DesignTokens.textSecondary)
                     }
                 }
-                .padding(16)
+                .padding(DesignTokens.spacingMD)
             }
+            .background(DesignTokens.backgroundPrimary.ignoresSafeArea())
             .navigationTitle("Trip Details")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
+                        .foregroundStyle(DesignTokens.textPrimary)
                 }
             }
         }

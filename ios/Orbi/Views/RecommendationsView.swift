@@ -83,7 +83,6 @@ final class RecommendationsViewModel: ObservableObject {
             )
             hotels = response.results
             hotelFiltersBroadened = response.filtersBroadened
-            // Auto-select first hotel if none selected
             if selectedHotel == nil, let first = hotels.first {
                 selectHotel(first)
             }
@@ -148,22 +147,24 @@ final class RecommendationsViewModel: ObservableObject {
 }
 
 
+
 // MARK: - Recommendations View
 
 /// Displays top 3 hotel and restaurant recommendations with refresh and filter-broadened indication.
-/// Validates: Requirements 7.1, 7.2, 7.3, 7.4, 7.5
+/// Validates: Requirements 7.1, 7.2, 7.3, 7.4, 7.5, 10.1, 10.2, 10.3, 10.4
 struct RecommendationsView: View {
 
     @ObservedObject var viewModel: RecommendationsViewModel
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: DesignTokens.spacingLG) {
                 hotelsSection
                 restaurantsSection
             }
-            .padding(16)
+            .padding(DesignTokens.spacingMD)
         }
+        .background(DesignTokens.backgroundPrimary)
         .task {
             if viewModel.hotels.isEmpty && viewModel.restaurants.isEmpty {
                 await viewModel.loadAll()
@@ -174,10 +175,11 @@ struct RecommendationsView: View {
     // MARK: - Hotels Section (Req 7.1, 7.3)
 
     private var hotelsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DesignTokens.spacingSM) {
             HStack {
                 Label("Hotels", systemImage: "building.2")
                     .font(.title3.weight(.bold))
+                    .foregroundStyle(DesignTokens.textPrimary)
                 Spacer()
                 refreshButton(isLoading: viewModel.isLoadingHotels) {
                     Task { await viewModel.refreshHotels() }
@@ -212,10 +214,11 @@ struct RecommendationsView: View {
     // MARK: - Restaurants Section (Req 7.2, 7.3)
 
     private var restaurantsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DesignTokens.spacingSM) {
             HStack {
                 Label("Restaurants", systemImage: "fork.knife")
                     .font(.title3.weight(.bold))
+                    .foregroundStyle(DesignTokens.textPrimary)
                 Spacer()
                 refreshButton(isLoading: viewModel.isLoadingRestaurants) {
                     Task { await viewModel.refreshRestaurants() }
@@ -250,24 +253,28 @@ struct RecommendationsView: View {
             if isLoading {
                 ProgressView()
                     .controlSize(.small)
+                    .tint(DesignTokens.accentCyan)
             } else {
                 Image(systemName: "arrow.clockwise")
+                    .foregroundStyle(DesignTokens.accentCyan)
             }
         }
+        .padding(DesignTokens.spacingSM)
+        .glassmorphic(cornerRadius: DesignTokens.radiusSM)
         .disabled(isLoading)
     }
 
     private var filtersBroadenedBanner: some View {
         HStack(spacing: 6) {
             Image(systemName: "info.circle.fill")
-                .foregroundStyle(.orange)
+                .foregroundStyle(DesignTokens.accentCyan)
             Text("Filters were broadened to show more results")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DesignTokens.textSecondary)
         }
-        .padding(8)
+        .padding(DesignTokens.spacingSM)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+        .glassmorphic(cornerRadius: DesignTokens.radiusSM)
         .accessibilityLabel("Filters were broadened to show more results")
     }
 
@@ -275,6 +282,7 @@ struct RecommendationsView: View {
         HStack {
             Spacer()
             ProgressView()
+                .tint(DesignTokens.accentCyan)
                 .padding(.vertical, 24)
             Spacer()
         }
@@ -283,22 +291,23 @@ struct RecommendationsView: View {
     private func emptyPlaceholder(text: String) -> some View {
         Text(text)
             .font(.subheadline)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(DesignTokens.textSecondary)
             .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.vertical, 16)
+            .padding(.vertical, DesignTokens.spacingMD)
     }
 
     private func errorBanner(message: String, retry: @escaping () -> Void) -> some View {
         VStack(spacing: 8) {
             Label(message, systemImage: "exclamationmark.triangle.fill")
                 .font(.subheadline)
-                .foregroundStyle(.red)
+                .foregroundStyle(.red.opacity(0.9))
             Button("Retry", action: retry)
                 .font(.caption.weight(.medium))
+                .foregroundStyle(DesignTokens.accentCyan)
         }
         .frame(maxWidth: .infinity)
-        .padding(12)
-        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
+        .padding(DesignTokens.spacingSM)
+        .glassmorphic(cornerRadius: DesignTokens.radiusSM)
     }
 }
 
@@ -317,22 +326,20 @@ struct PlaceCard: View {
             onTap?()
         } label: {
             HStack(spacing: 12) {
-                // Image (Req 7.3)
                 placeImage
 
-                // Info
                 VStack(alignment: .leading, spacing: 4) {
                     Text(place.name)
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(DesignTokens.textPrimary)
                         .lineLimit(2)
 
                     HStack(spacing: 8) {
                         Label(String(format: "%.1f", place.rating), systemImage: "star.fill")
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(.yellow)
                         if !place.priceLevel.isEmpty {
                             Text(place.priceLevel)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(DesignTokens.textSecondary)
                         }
                     }
                     .font(.caption)
@@ -342,18 +349,15 @@ struct PlaceCard: View {
 
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(DesignTokens.accentCyan)
                         .font(.title3)
                 }
             }
-            .padding(12)
-            .background(
-                isSelected ? Color.orange.opacity(0.08) : Color(.systemGray6),
-                in: RoundedRectangle(cornerRadius: 12)
-            )
+            .padding(DesignTokens.spacingSM)
+            .glassmorphic(cornerRadius: DesignTokens.radiusMD)
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? Color.orange : Color.clear, lineWidth: 1.5)
+                RoundedRectangle(cornerRadius: DesignTokens.radiusMD)
+                    .stroke(isSelected ? DesignTokens.accentCyan : Color.clear, lineWidth: 1.5)
             )
         }
         .buttonStyle(.plain)
@@ -376,19 +380,19 @@ struct PlaceCard: View {
                 }
             }
             .frame(width: 64, height: 64)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .clipShape(RoundedRectangle(cornerRadius: DesignTokens.radiusSM))
         } else {
             imagePlaceholder
         }
     }
 
     private var imagePlaceholder: some View {
-        RoundedRectangle(cornerRadius: 8)
-            .fill(Color(.systemGray5))
+        RoundedRectangle(cornerRadius: DesignTokens.radiusSM)
+            .fill(DesignTokens.surfaceGlass)
             .frame(width: 64, height: 64)
             .overlay(
                 Image(systemName: "photo")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DesignTokens.textSecondary)
             )
     }
 }
@@ -399,19 +403,18 @@ struct PlaceCard: View {
     let vm = RecommendationsViewModel(
         latitude: 35.6762,
         longitude: 139.6503,
-        hotelPriceRange: "$$",
-        restaurantPriceRange: "$$"
+        hotelPriceRange: "$",
+        restaurantPriceRange: "$"
     )
-    // Inject sample data for preview
     vm.hotels = [
-        PlaceRecommendation(placeId: "h1", name: "Park Hyatt Tokyo", rating: 4.6, priceLevel: "$$$", imageUrl: nil, latitude: 35.6867, longitude: 139.6906),
-        PlaceRecommendation(placeId: "h2", name: "The Peninsula Tokyo", rating: 4.7, priceLevel: "$$$", imageUrl: nil, latitude: 35.6750, longitude: 139.7630),
-        PlaceRecommendation(placeId: "h3", name: "Aman Tokyo", rating: 4.8, priceLevel: "$$$$", imageUrl: nil, latitude: 35.6860, longitude: 139.7640),
+        PlaceRecommendation(placeId: "h1", name: "Park Hyatt Tokyo", rating: 4.6, priceLevel: "$$", imageUrl: nil, latitude: 35.6867, longitude: 139.6906),
+        PlaceRecommendation(placeId: "h2", name: "The Peninsula Tokyo", rating: 4.7, priceLevel: "$$", imageUrl: nil, latitude: 35.6750, longitude: 139.7630),
+        PlaceRecommendation(placeId: "h3", name: "Aman Tokyo", rating: 4.8, priceLevel: "$$", imageUrl: nil, latitude: 35.6860, longitude: 139.7640),
     ]
     vm.restaurants = [
-        PlaceRecommendation(placeId: "r1", name: "Sushi Dai", rating: 4.7, priceLevel: "$$", imageUrl: nil, latitude: 35.6655, longitude: 139.7710),
+        PlaceRecommendation(placeId: "r1", name: "Sushi Dai", rating: 4.7, priceLevel: "$", imageUrl: nil, latitude: 35.6655, longitude: 139.7710),
         PlaceRecommendation(placeId: "r2", name: "Ichiran Ramen", rating: 4.5, priceLevel: "$", imageUrl: nil, latitude: 35.6600, longitude: 139.7000),
-        PlaceRecommendation(placeId: "r3", name: "Gonpachi Nishi-Azabu", rating: 4.3, priceLevel: "$$", imageUrl: nil, latitude: 35.6560, longitude: 139.7260),
+        PlaceRecommendation(placeId: "r3", name: "Gonpachi Nishi-Azabu", rating: 4.3, priceLevel: "$", imageUrl: nil, latitude: 35.6560, longitude: 139.7260),
     ]
     vm.selectedHotel = vm.hotels.first
     return NavigationStack {

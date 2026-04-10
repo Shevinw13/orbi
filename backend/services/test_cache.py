@@ -1,65 +1,113 @@
-"""Unit tests for the Redis cache utility."""
+"""Unit tests for the cache service with in-memory fallback."""
+
+from __future__ import annotations
+
+import os
+import time
+
+os.environ.setdefault("SUPABASE_URL", "https://test.supabase.co")
+os.environ.setdefault("SUPABASE_KEY", "test-key")
+os.environ.setdefault("OPENAI_API_KEY", "test-openai-key")
+os.environ.setdefault("JWT_SECRET", "test-jwt-secret")
 
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from backend.services.cache import DEFAULT_TTL, get_cached, set_cached
+from backend.services.cache import DEFAULT_TTL, get_cached, set_cached, get_redis_client
 
 
 @pytest.fixture(autouse=True)
-def _mock_redis(monkeypatch):
-    """Replace the Redis client with a simple dict-backed fake for every test."""
-    store: dict[str, str] = {}
-    mock_client = MagicMock()
-
-    def fake_get(key):
-        return store.get(key)
-
-    def fake_set(key, value, ex=None):
-        store[key] = value
-
-    mock_client.get = MagicMock(side_effect=fake_get)
-    mock_client.set = MagicMock(side_effect=fake_set)
-
-    monkeypatch.setattr(
-        "backend.services.cache.get_redis_client", lambda: mock_client
-    )
-    yield mock_client, store
+def _clear_memory_store():
+    """Clear in-memory cache and reset Redis client between tests."""
+    from backend.services import cache
+    cache._memory_store.clear()
+    cache._redis_client = None
+    yield
+    cache._memory_store.clear()
+    cache._redis_client = None
 
 
-class TestGetCached:
+class TestInMemoryFallback:
+    """Tests for in-memory cache when Redis is not configured."""
+
     def test_returns_none_on_cache_miss(self):
         assert get_cached("nonexistent") is None
 
-    def test_returns_deserialized_value(self, _mock_redis):
-        _, store = _mock_redis
-        store["key1"] = '{"name": "Tokyo"}'
-        result = get_cached("key1")
-        assert result == {"name": "Tokyo"}
+    def test_roundtrip_dict(self):
+        set_cached("k1", {"name": "Tokyo"})
+        assert get_cached("k1") == {"name": "Tokyo"}
 
-    def test_returns_list_value(self, _mock_redis):
-        _, store = _mock_redis
-        store["list_key"] = '[1, 2, 3]'
-        assert get_cached("list_key") == [1, 2, 3]
+    def test_roundtrip_list(self):
+        set_cached("k2", [1, 2, 3])
+        assert get_cached("k2") == [1, 2, 3]
 
-    def test_returns_string_value(self, _mock_redis):
-        _, store = _mock_redis
-        store["str_key"] = '"hello"'
-        assert get_cached("str_key") == "hello"
+    def test_roundtrip_string(self):
+        set_cached("k3", "hello")
+        assert get_cached("k3") == "hello"
+
+    def test_ttl_eviction(self):
+        """Entries should be evicted after TTL expires."""
+        set_cached("expire_me", "value", ttl=1)
+        assert get_cached("expire_me") == "value"
+
+        # Simulate time passing
+        from backend.services import cache
+        key_data = cache._memory_store["expire_me"]
+        # Manually set expiry to the past
+        cache._memory_store["expire_me"] = (key_data[0], time.time() - 1)
+        assert get_cached("expire_me") is None
 
 
-class TestSetCached:
-    def test_stores_value_with_default_ttl(self, _mock_redis):
-        mock_client, _ = _mock_redis
-        set_cached("k", {"a": 1})
-        mock_client.set.assert_called_once_with("k", '{"a": 1}', ex=DEFAULT_TTL)
+class TestGetRedisClient:
+    """Tests for Redis client initialization."""
 
-    def test_stores_value_with_custom_ttl(self, _mock_redis):
-        mock_client, _ = _mock_redis
-        set_cached("k", [1, 2], ttl=60)
-        mock_client.set.assert_called_once_with("k", "[1, 2]", ex=60)
+    def test_returns_none_when_url_empty(self):
+        with patch("backend.services.cache.settings") as mock_settings:
+            mock_settings.upstash_redis_url = ""
+            from backend.services import cache
+            cache._redis_client = None
+            result = get_redis_client()
+            assert result is None
 
-    def test_roundtrip(self):
-        set_cached("rt", {"x": 42})
-        assert get_cached("rt") == {"x": 42}
+    def test_returns_client_when_url_set(self):
+        with patch("backend.services.cache.settings") as mock_settings:
+            mock_settings.upstash_redis_url = "redis://localhost:6379"
+            from backend.services import cache
+            cache._redis_client = None
+            with patch("backend.services.cache.redis.from_url") as mock_from_url:
+                mock_client = MagicMock()
+                mock_from_url.return_value = mock_client
+                result = get_redis_client()
+                assert result is mock_client
+
+
+class TestRedisFallback:
+    """Tests for Redis error -> in-memory fallback."""
+
+    def test_get_falls_back_on_redis_error(self):
+        """When Redis get raises, should fall back to in-memory."""
+        from backend.services import cache
+
+        # Pre-populate in-memory store
+        import json
+        cache._memory_store["fallback_key"] = (json.dumps("mem_value"), time.time() + 3600)
+
+        mock_redis = MagicMock()
+        mock_redis.get.side_effect = Exception("Redis down")
+
+        with patch("backend.services.cache.get_redis_client", return_value=mock_redis):
+            result = get_cached("fallback_key")
+            assert result == "mem_value"
+
+    def test_set_falls_back_on_redis_error(self):
+        """When Redis set raises, should store in memory."""
+        from backend.services import cache
+
+        mock_redis = MagicMock()
+        mock_redis.set.side_effect = Exception("Redis down")
+
+        with patch("backend.services.cache.get_redis_client", return_value=mock_redis):
+            set_cached("fb_key", {"data": 1})
+
+        assert "fb_key" in cache._memory_store

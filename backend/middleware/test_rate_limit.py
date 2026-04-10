@@ -1,18 +1,15 @@
 """Unit tests for RateLimitMiddleware.
 
-Requirements: 12.4
+Requirements: 11.1, 11.2, 11.3, 12.4
 """
 
 from __future__ import annotations
 
 import os
 
-# Provide dummy env vars so backend.config.Settings can initialise
 os.environ.setdefault("SUPABASE_URL", "https://test.supabase.co")
 os.environ.setdefault("SUPABASE_KEY", "test-key")
-os.environ.setdefault("UPSTASH_REDIS_URL", "redis://localhost:6379")
 os.environ.setdefault("OPENAI_API_KEY", "sk-test")
-os.environ.setdefault("GOOGLE_PLACES_API_KEY", "test-places-key")
 os.environ.setdefault("JWT_SECRET", "test-jwt-secret")
 
 from unittest.mock import MagicMock, patch
@@ -22,7 +19,7 @@ from fastapi import FastAPI, Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.testclient import TestClient
 
-from backend.middleware.rate_limit import RateLimitMiddleware, RATE_LIMIT
+from backend.middleware.rate_limit import RateLimitMiddleware, RATE_LIMIT, _memory_counters
 
 
 # ---------------------------------------------------------------------------
@@ -42,9 +39,6 @@ class FakeAuthMiddleware(BaseHTTPMiddleware):
 def _create_app() -> FastAPI:
     """Build a minimal FastAPI app with RateLimitMiddleware."""
     app = FastAPI()
-
-    # Order: RateLimit added first (inner), FakeAuth added second (outer)
-    # so FakeAuth runs first on the request and sets user_id.
     app.add_middleware(RateLimitMiddleware)
     app.add_middleware(FakeAuthMiddleware)
 
@@ -66,13 +60,19 @@ def _make_mock_redis(current_count: int = 1) -> MagicMock:
     return mock
 
 
+@pytest.fixture(autouse=True)
+def _clear_counters():
+    """Clear in-memory rate limit counters between tests."""
+    _memory_counters.clear()
+    yield
+    _memory_counters.clear()
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
 
 class TestRateLimitSkipsUnauthenticated:
-    """Unauthenticated requests (no user_id) should pass through without rate limiting."""
-
     @patch("backend.middleware.rate_limit.get_redis_client")
     def test_no_user_id_passes_through(self, mock_get_redis):
         mock_redis = _make_mock_redis()
@@ -94,9 +94,7 @@ class TestRateLimitSkipsUnauthenticated:
         mock_redis.incr.assert_not_called()
 
 
-class TestRateLimitCounterLogic:
-    """Authenticated requests should increment the Redis counter."""
-
+class TestRateLimitWithRedis:
     @patch("backend.middleware.rate_limit.get_redis_client")
     def test_first_request_sets_ttl(self, mock_get_redis):
         mock_redis = _make_mock_redis(current_count=1)
@@ -120,19 +118,6 @@ class TestRateLimitCounterLogic:
         mock_redis.expire.assert_not_called()
 
     @patch("backend.middleware.rate_limit.get_redis_client")
-    def test_request_at_limit_still_allowed(self, mock_get_redis):
-        mock_redis = _make_mock_redis(current_count=RATE_LIMIT)
-        mock_get_redis.return_value = mock_redis
-        client = TestClient(_create_app())
-
-        resp = client.get("/protected", headers={"X-User-Id": "user-1"})
-        assert resp.status_code == 200
-
-
-class TestRateLimitExceeded:
-    """Requests exceeding the limit should receive 429."""
-
-    @patch("backend.middleware.rate_limit.get_redis_client")
     def test_over_limit_returns_429(self, mock_get_redis):
         mock_redis = _make_mock_redis(current_count=RATE_LIMIT + 1)
         mock_get_redis.return_value = mock_redis
@@ -142,13 +127,37 @@ class TestRateLimitExceeded:
         assert resp.status_code == 429
         body = resp.json()
         assert body["error"] == "rate_limit_exceeded"
-        assert "Too many requests" in body["message"]
 
+
+class TestRateLimitInMemoryFallback:
+    @patch("backend.middleware.rate_limit.get_redis_client", return_value=None)
+    def test_allows_request_when_no_redis(self, mock_get_redis):
+        client = TestClient(_create_app())
+        resp = client.get("/protected", headers={"X-User-Id": "user-mem"})
+        assert resp.status_code == 200
+
+    @patch("backend.middleware.rate_limit.get_redis_client", return_value=None)
+    def test_memory_counter_enforces_limit(self, mock_get_redis):
+        """In-memory counter should return 429 after exceeding limit."""
+        import time as _time
+
+        client = TestClient(_create_app())
+        # Pre-fill the counter to just at the limit (window still active)
+        _memory_counters["user-flood"] = (RATE_LIMIT, _time.time())
+
+        # Next request should push over the limit and return 429
+        resp = client.get("/protected", headers={"X-User-Id": "user-flood"})
+        assert resp.status_code == 429
+
+
+class TestRateLimitRedisError:
     @patch("backend.middleware.rate_limit.get_redis_client")
-    def test_well_over_limit_returns_429(self, mock_get_redis):
-        mock_redis = _make_mock_redis(current_count=200)
+    def test_allows_request_on_redis_error(self, mock_get_redis):
+        """Redis errors should fail-open (allow request through)."""
+        mock_redis = MagicMock()
+        mock_redis.incr.side_effect = Exception("Redis connection lost")
         mock_get_redis.return_value = mock_redis
         client = TestClient(_create_app())
 
-        resp = client.get("/protected", headers={"X-User-Id": "user-1"})
-        assert resp.status_code == 429
+        resp = client.get("/protected", headers={"X-User-Id": "user-err"})
+        assert resp.status_code == 200

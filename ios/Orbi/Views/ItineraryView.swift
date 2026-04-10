@@ -116,7 +116,6 @@ final class ItineraryViewModel: ObservableObject {
                 activitiesTotal += slot.estimatedCostUsd ?? 0
             }
         }
-        // Local estimate — hotel and food costs would come from full cost endpoint
         let perDay = itinerary.days.map { day in
             let dayActivities = day.slots.reduce(0.0) { $0 + ($1.estimatedCostUsd ?? 0) }
             return DayCost(day: day.dayNumber, hotel: 0, food: 0, activities: dayActivities, subtotal: dayActivities)
@@ -132,6 +131,56 @@ final class ItineraryViewModel: ObservableObject {
 }
 
 
+
+// MARK: - Day Selector View
+
+/// Horizontal scrollable row of pill buttons for day navigation.
+/// Validates: Requirements 8.2, 8.3
+struct DaySelectorView: View {
+    let days: [ItineraryDay]
+    @Binding var selectedDay: Int
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: DesignTokens.spacingSM) {
+                ForEach(days) { day in
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            selectedDay = day.dayNumber
+                        }
+                    } label: {
+                        Text("Day \(day.dayNumber)")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(selectedDay == day.dayNumber ? .white : DesignTokens.textSecondary)
+                            .padding(.horizontal, DesignTokens.spacingMD)
+                            .padding(.vertical, DesignTokens.spacingSM)
+                            .background(
+                                Group {
+                                    if selectedDay == day.dayNumber {
+                                        RoundedRectangle(cornerRadius: DesignTokens.radiusSM)
+                                            .fill(DesignTokens.accentGradient)
+                                    } else {
+                                        RoundedRectangle(cornerRadius: DesignTokens.radiusSM)
+                                            .stroke(DesignTokens.surfaceGlassBorder, lineWidth: 1)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: DesignTokens.radiusSM)
+                                                    .fill(DesignTokens.surfaceGlass)
+                                            )
+                                    }
+                                }
+                            )
+                    }
+                    .accessibilityLabel("Day \(day.dayNumber)")
+                    .accessibilityAddTraits(selectedDay == day.dayNumber ? .isSelected : [])
+                }
+            }
+            .padding(.horizontal, DesignTokens.spacingMD)
+            .padding(.vertical, DesignTokens.spacingSM)
+        }
+    }
+}
+
+
 // MARK: - Itinerary View (Req 5.1, 15.4)
 
 /// Vertical timeline grouped by day with interactive itinerary items.
@@ -141,6 +190,7 @@ struct ItineraryView: View {
     @StateObject private var viewModel: ItineraryViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var mapRouteDay: ItineraryDay?
+    @State private var selectedDay: Int = 1
 
     init(itinerary: ItineraryResponse) {
         _viewModel = StateObject(wrappedValue: ItineraryViewModel(itinerary: itinerary))
@@ -149,13 +199,20 @@ struct ItineraryView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(viewModel.itinerary.days) { day in
-                            daySectionView(day: day)
+                DesignTokens.backgroundPrimary.ignoresSafeArea()
+
+                VStack(spacing: 0) {
+                    // Day selector
+                    DaySelectorView(days: viewModel.itinerary.days, selectedDay: $selectedDay)
+
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            if let day = viewModel.itinerary.days.first(where: { $0.dayNumber == selectedDay }) {
+                                daySectionView(day: day)
+                            }
                         }
+                        .padding(.bottom, 24)
                     }
-                    .padding(.bottom, 24)
                 }
 
                 if viewModel.isReplacing {
@@ -164,9 +221,12 @@ struct ItineraryView: View {
             }
             .navigationTitle("\(viewModel.itinerary.destination) Itinerary")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(DesignTokens.backgroundPrimary, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }
+                        .foregroundStyle(DesignTokens.textPrimary)
                 }
             }
             .sheet(isPresented: $viewModel.showDetail) {
@@ -193,17 +253,16 @@ struct ItineraryView: View {
         }
     }
 
+
     // MARK: - Day Section
 
     private func daySectionView(day: ItineraryDay) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Day header — also serves as drop target for cross-day moves (Req 5.4)
             daySectionHeader(day: day)
                 .onDrop(of: [.text], isTargeted: nil) { providers in
                     handleCrossDayDrop(providers: providers, targetDay: day.dayNumber)
                 }
 
-            // Slots timeline
             ForEach(Array(day.slots.enumerated()), id: \.element.id) { index, slot in
                 slotRow(slot: slot, dayNumber: day.dayNumber, isLast: index == day.slots.count - 1)
             }
@@ -211,12 +270,10 @@ struct ItineraryView: View {
                 viewModel.moveSlot(in: day.dayNumber, from: source, to: destination)
             }
 
-            // Restaurant recommendation
             if let restaurant = day.restaurant {
                 restaurantRow(restaurant: restaurant)
             }
 
-            // Add activity button (Req 5.6)
             addActivityButton(dayNumber: day.dayNumber)
         }
     }
@@ -224,24 +281,26 @@ struct ItineraryView: View {
     private func daySectionHeader(day: ItineraryDay) -> some View {
         HStack {
             Image(systemName: "calendar")
-                .foregroundStyle(.orange)
+                .foregroundStyle(DesignTokens.accentCyan)
             Text("Day \(day.dayNumber)")
                 .font(.title3.weight(.bold))
+                .foregroundStyle(DesignTokens.textPrimary)
             Spacer()
             Button {
                 mapRouteDay = day
             } label: {
                 Label("Map", systemImage: "map")
                     .font(.caption.weight(.medium))
+                    .foregroundStyle(DesignTokens.accentCyan)
             }
             .accessibilityLabel("Show map route for Day \(day.dayNumber)")
             Text("\(day.slots.count) activities")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DesignTokens.textSecondary)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(Color(.systemGroupedBackground))
+        .padding(.horizontal, DesignTokens.spacingMD)
+        .padding(.vertical, DesignTokens.spacingSM)
+        .background(DesignTokens.backgroundSecondary)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Day \(day.dayNumber), \(day.slots.count) activities")
     }
@@ -250,32 +309,29 @@ struct ItineraryView: View {
 
     private func slotRow(slot: ItinerarySlot, dayNumber: Int, isLast: Bool) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            // Timeline indicator
             VStack(spacing: 0) {
                 Circle()
                     .fill(timeSlotColor(slot.timeSlot))
                     .frame(width: 12, height: 12)
                 if !isLast {
                     Rectangle()
-                        .fill(Color(.systemGray4))
+                        .fill(DesignTokens.surfaceGlassBorder)
                         .frame(width: 2)
                         .frame(maxHeight: .infinity)
                 }
             }
             .frame(width: 12)
 
-            // Content
             VStack(alignment: .leading, spacing: 4) {
                 Text(slot.timeSlot)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(timeSlotColor(slot.timeSlot))
-
                 Text(slot.activityName)
                     .font(.body.weight(.medium))
-
+                    .foregroundStyle(DesignTokens.textPrimary)
                 Text(slot.description)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DesignTokens.textSecondary)
                     .lineLimit(2)
 
                 HStack(spacing: 12) {
@@ -288,16 +344,18 @@ struct ItineraryView: View {
                     }
                 }
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DesignTokens.textSecondary)
 
-                // Action buttons (Req 5.5, 5.7)
                 slotActions(slot: slot, dayNumber: dayNumber)
             }
-            .padding(.vertical, 8)
+            .padding(DesignTokens.spacingSM)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .glassmorphic(cornerRadius: DesignTokens.radiusMD)
 
-            Spacer()
+            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, DesignTokens.spacingMD)
+        .padding(.vertical, DesignTokens.spacingXS)
         .contentShape(Rectangle())
         .onTapGesture {
             viewModel.selectedSlot = slot
@@ -325,6 +383,7 @@ struct ItineraryView: View {
             } label: {
                 Label("Replace", systemImage: "arrow.triangle.2.circlepath")
                     .font(.caption2)
+                    .foregroundStyle(DesignTokens.accentCyan)
             }
             .disabled(viewModel.isReplacing)
             .accessibilityLabel("Replace \(slot.activityName)")
@@ -346,7 +405,7 @@ struct ItineraryView: View {
         HStack(alignment: .top, spacing: 12) {
             VStack(spacing: 0) {
                 Image(systemName: "fork.knife.circle.fill")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(DesignTokens.accentCyan)
                     .font(.title3)
             }
             .frame(width: 12)
@@ -354,22 +413,24 @@ struct ItineraryView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Restaurant")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(DesignTokens.accentCyan)
                 Text(restaurant.name)
                     .font(.body.weight(.medium))
+                    .foregroundStyle(DesignTokens.textPrimary)
                 HStack(spacing: 8) {
                     Text(restaurant.cuisine)
                     Text(restaurant.priceLevel)
                     Label(String(format: "%.1f", restaurant.rating), systemImage: "star.fill")
+                        .foregroundStyle(.yellow)
                 }
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DesignTokens.textSecondary)
             }
             .padding(.vertical, 8)
 
             Spacer()
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, DesignTokens.spacingMD)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Restaurant: \(restaurant.name), \(restaurant.cuisine), rating \(String(format: "%.1f", restaurant.rating))")
     }
@@ -386,8 +447,8 @@ struct ItineraryView: View {
                 Text("Add Activity")
             }
             .font(.subheadline)
-            .foregroundStyle(.orange)
-            .padding(.horizontal, 16)
+            .foregroundStyle(DesignTokens.accentCyan)
+            .padding(.horizontal, DesignTokens.spacingMD)
             .padding(.vertical, 10)
         }
         .accessibilityLabel("Add activity to Day \(dayNumber)")
@@ -411,13 +472,13 @@ struct ItineraryView: View {
             Color.black.opacity(0.3).ignoresSafeArea()
             VStack(spacing: 12) {
                 ProgressView()
-                    .tint(.orange)
+                    .tint(DesignTokens.accentCyan)
                 Text("Finding alternative…")
                     .font(.subheadline)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(DesignTokens.textPrimary)
             }
             .padding(24)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+            .glassmorphic(cornerRadius: DesignTokens.radiusMD)
         }
     }
 
@@ -425,13 +486,14 @@ struct ItineraryView: View {
 
     private func timeSlotColor(_ timeSlot: String) -> Color {
         switch timeSlot.lowercased() {
-        case "morning": return .orange
-        case "afternoon": return .blue
+        case "morning": return DesignTokens.accentCyan
+        case "afternoon": return DesignTokens.accentBlue
         case "evening": return .purple
         default: return .gray
         }
     }
 }
+
 
 
 // MARK: - Slot Detail View (Req 5.2)
@@ -459,38 +521,32 @@ struct SlotDetailView: View {
                             ))
                         }
                         .frame(height: 200)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.radiusSM))
                         .allowsHitTesting(false)
                     }
 
-                    // Activity info
                     VStack(alignment: .leading, spacing: 8) {
                         Text(slot.timeSlot)
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-
+                            .foregroundStyle(DesignTokens.textSecondary)
                         Text(slot.activityName)
                             .font(.title2.weight(.bold))
-
+                            .foregroundStyle(DesignTokens.textPrimary)
                         Text(slot.description)
                             .font(.body)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(DesignTokens.textSecondary)
                     }
 
-                    Divider()
+                    Divider().overlay(DesignTokens.surfaceGlassBorder)
 
-                    // Details grid
                     VStack(alignment: .leading, spacing: 12) {
                         detailRow(icon: "clock", label: "Duration", value: "\(slot.estimatedDurationMin) minutes")
-
                         if let cost = slot.estimatedCostUsd, cost > 0 {
                             detailRow(icon: "dollarsign.circle", label: "Estimated Cost", value: "$\(Int(cost))")
                         }
-
                         if let travel = slot.travelTimeToNextMin, travel > 0 {
                             detailRow(icon: "car", label: "Travel to Next", value: "\(travel) minutes")
                         }
-
                         if slot.latitude != 0, slot.longitude != 0 {
                             detailRow(
                                 icon: "location",
@@ -502,13 +558,15 @@ struct SlotDetailView: View {
 
                     Spacer()
                 }
-                .padding(16)
+                .padding(DesignTokens.spacingMD)
             }
+            .background(DesignTokens.backgroundPrimary.ignoresSafeArea())
             .navigationTitle("Activity Details")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
+                        .foregroundStyle(DesignTokens.textPrimary)
                 }
             }
         }
@@ -517,14 +575,15 @@ struct SlotDetailView: View {
     private func detailRow(icon: String, label: String, value: String) -> some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
-                .foregroundStyle(.orange)
+                .foregroundStyle(DesignTokens.accentCyan)
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 2) {
                 Text(label)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DesignTokens.textSecondary)
                 Text(value)
                     .font(.subheadline.weight(.medium))
+                    .foregroundStyle(DesignTokens.textPrimary)
             }
         }
         .accessibilityElement(children: .combine)
@@ -608,7 +667,7 @@ struct AddActivitySheet: View {
                     ItinerarySlot(timeSlot: "Afternoon", activityName: "Senso-ji Temple", description: "Visit Tokyo's oldest temple in Asakusa", latitude: 35.7148, longitude: 139.7967, estimatedDurationMin: 90, travelTimeToNextMin: 20, estimatedCostUsd: 0),
                     ItinerarySlot(timeSlot: "Evening", activityName: "Shibuya Crossing", description: "Experience the world's busiest pedestrian crossing", latitude: 35.6595, longitude: 139.7004, estimatedDurationMin: 60, travelTimeToNextMin: nil, estimatedCostUsd: 0)
                 ],
-                restaurant: ItineraryRestaurant(name: "Sushi Dai", cuisine: "Sushi", priceLevel: "$$", rating: 4.7, latitude: 35.6655, longitude: 139.7710, imageUrl: nil)
+                restaurant: ItineraryRestaurant(name: "Sushi Dai", cuisine: "Sushi", priceLevel: "$", rating: 4.7, latitude: 35.6655, longitude: 139.7710, imageUrl: nil)
             ),
             ItineraryDay(
                 dayNumber: 2,

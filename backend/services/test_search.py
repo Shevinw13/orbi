@@ -1,4 +1,4 @@
-"""Unit tests for the destination search service."""
+"""Unit tests for the destination search service (Nominatim)."""
 
 from __future__ import annotations
 
@@ -7,66 +7,71 @@ import os
 # Provide dummy env vars so backend.config.Settings can initialise
 os.environ.setdefault("SUPABASE_URL", "https://test.supabase.co")
 os.environ.setdefault("SUPABASE_KEY", "test-key")
-os.environ.setdefault("UPSTASH_REDIS_URL", "redis://localhost:6379")
 os.environ.setdefault("OPENAI_API_KEY", "test-openai-key")
-os.environ.setdefault("GOOGLE_PLACES_API_KEY", "test-places-key")
 os.environ.setdefault("JWT_SECRET", "test-jwt-secret")
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from backend.services.search import _cache_key, search_destinations
+from backend.services.search import (
+    _cache_key,
+    search_destinations,
+    get_popular_cities,
+    POPULAR_CITIES,
+)
 
 
 @pytest.fixture(autouse=True)
-def _mock_redis(monkeypatch):
-    """Replace Redis with a dict-backed fake."""
-    store: dict[str, str] = {}
-    mock_client = MagicMock()
-
-    import json
-
-    def fake_get(key):
-        return store.get(key)
-
-    def fake_set(key, value, ex=None):
-        store[key] = value
-
-    mock_client.get = MagicMock(side_effect=fake_get)
-    mock_client.set = MagicMock(side_effect=fake_set)
-
-    monkeypatch.setattr(
-        "backend.services.cache.get_redis_client", lambda: mock_client
-    )
-    yield mock_client, store
+def _clear_memory_store():
+    """Clear in-memory cache between tests."""
+    from backend.services import cache
+    cache._memory_store.clear()
+    # Ensure Redis client returns None (use in-memory)
+    cache._redis_client = None
+    yield
+    cache._memory_store.clear()
 
 
 # -- Helpers --
 
-AUTOCOMPLETE_OK = {
-    "status": "OK",
-    "predictions": [
-        {"place_id": "ChIJ1", "description": "Tokyo, Japan"},
-        {"place_id": "ChIJ2", "description": "Toronto, Canada"},
-    ],
-}
+NOMINATIM_RESULTS = [
+    {
+        "place_id": 123,
+        "display_name": "Tokyo, Japan",
+        "lat": "35.6762",
+        "lon": "139.6503",
+        "type": "city",
+        "class": "place",
+    },
+    {
+        "place_id": 456,
+        "display_name": "Toronto, Ontario, Canada",
+        "lat": "43.6532",
+        "lon": "-79.3832",
+        "type": "city",
+        "class": "place",
+    },
+]
 
-AUTOCOMPLETE_ZERO = {"status": "ZERO_RESULTS", "predictions": []}
-
-DETAIL_TOKYO = {
-    "result": {
-        "name": "Tokyo",
-        "geometry": {"location": {"lat": 35.6762, "lng": 139.6503}},
-    }
-}
-
-DETAIL_TORONTO = {
-    "result": {
-        "name": "Toronto",
-        "geometry": {"location": {"lat": 43.6532, "lng": -79.3832}},
-    }
-}
+NOMINATIM_MIXED_TYPES = [
+    {
+        "place_id": 1,
+        "display_name": "Tokyo, Japan",
+        "lat": "35.6762",
+        "lon": "139.6503",
+        "type": "city",
+        "class": "place",
+    },
+    {
+        "place_id": 2,
+        "display_name": "Tokyo Tower",
+        "lat": "35.6586",
+        "lon": "139.7454",
+        "type": "attraction",
+        "class": "tourism",
+    },
+]
 
 
 def _mock_response(json_data, status_code=200):
@@ -93,15 +98,10 @@ class TestCacheKey:
 
 class TestSearchDestinations:
     @pytest.mark.asyncio
-    async def test_returns_results_from_api(self):
-        """Happy path: autocomplete + details calls produce correct output."""
-        responses = [
-            _mock_response(AUTOCOMPLETE_OK),
-            _mock_response(DETAIL_TOKYO),
-            _mock_response(DETAIL_TORONTO),
-        ]
+    async def test_returns_results_from_nominatim(self):
+        """Happy path: Nominatim returns city results."""
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(side_effect=responses)
+        mock_client.get = AsyncMock(return_value=_mock_response(NOMINATIM_RESULTS))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
@@ -110,44 +110,71 @@ class TestSearchDestinations:
 
         assert len(results) == 2
         assert results[0]["name"] == "Tokyo, Japan"
-        assert results[0]["place_id"] == "ChIJ1"
+        assert results[0]["place_id"] == "123"
         assert results[0]["latitude"] == 35.6762
-        assert results[1]["name"] == "Toronto, Canada"
+        assert results[1]["name"] == "Toronto, Ontario, Canada"
 
     @pytest.mark.asyncio
-    async def test_returns_empty_on_zero_results(self):
+    async def test_filters_non_city_types(self):
+        """Only city/town/administrative/village types should pass."""
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=_mock_response(AUTOCOMPLETE_ZERO))
+        mock_client.get = AsyncMock(return_value=_mock_response(NOMINATIM_MIXED_TYPES))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("backend.services.search.httpx.AsyncClient", return_value=mock_client):
-            results = await search_destinations("xyznonexistent")
+            results = await search_destinations("tokyo")
+
+        assert len(results) == 1
+        assert results[0]["name"] == "Tokyo, Japan"
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_on_error(self):
+        """API errors should return empty list, not raise."""
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(side_effect=Exception("Network error"))
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("backend.services.search.httpx.AsyncClient", return_value=mock_client):
+            results = await search_destinations("fail")
 
         assert results == []
 
     @pytest.mark.asyncio
-    async def test_returns_cached_results(self, _mock_redis):
+    async def test_returns_cached_results(self):
         """When cache has data, no HTTP calls should be made."""
-        import json
+        from backend.services.cache import set_cached
 
-        _, store = _mock_redis
         cached_data = [{"name": "Cached City", "place_id": "c1", "latitude": 1.0, "longitude": 2.0}]
         key = _cache_key("cached")
-        store[key] = json.dumps(cached_data)
+        set_cached(key, cached_data)
 
         results = await search_destinations("cached")
         assert len(results) == 1
         assert results[0]["name"] == "Cached City"
 
-    @pytest.mark.asyncio
-    async def test_raises_on_api_error(self):
-        error_resp = _mock_response({"status": "REQUEST_DENIED", "error_message": "bad key"})
-        mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=error_resp)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("backend.services.search.httpx.AsyncClient", return_value=mock_client):
-            with pytest.raises(RuntimeError, match="REQUEST_DENIED"):
-                await search_destinations("denied")
+class TestGetPopularCities:
+    @pytest.mark.asyncio
+    async def test_returns_20_cities(self):
+        cities = await get_popular_cities()
+        assert len(cities) == 20
+
+    @pytest.mark.asyncio
+    async def test_cities_have_required_fields(self):
+        cities = await get_popular_cities()
+        for city in cities:
+            assert "name" in city
+            assert "latitude" in city
+            assert "longitude" in city
+
+    @pytest.mark.asyncio
+    async def test_caches_results(self):
+        from backend.services.cache import get_cached
+        from backend.services.search import POPULAR_CITIES_CACHE_KEY
+
+        await get_popular_cities()
+        cached = get_cached(POPULAR_CITIES_CACHE_KEY)
+        assert cached is not None
+        assert len(cached) == 20

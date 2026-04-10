@@ -89,12 +89,13 @@ struct SearchBarView: View {
             // Search text field
             HStack {
                 Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.white.opacity(0.6))
 
                 TextField("Search destinations…", text: $viewModel.query)
                     .textFieldStyle(.plain)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.words)
+                    .foregroundStyle(DesignTokens.textPrimary)
                     .onChange(of: viewModel.query) { _, _ in
                         viewModel.onQueryChanged()
                     }
@@ -105,16 +106,19 @@ struct SearchBarView: View {
                         viewModel.reset()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.white.opacity(0.6))
                     }
                     .accessibilityLabel("Clear search")
                 }
+
+                Spacer()
+
+                Image(systemName: "slider.horizontal.3")
+                    .foregroundStyle(.white.opacity(0.6))
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 12)
-            .background(.ultraThinMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .shadow(color: .black.opacity(0.3), radius: 8, y: 4)
+            .padding(.horizontal, 14)
+            .frame(height: DesignTokens.searchBarHeight)
+            .glassmorphic(cornerRadius: DesignTokens.radiusMD)
 
             // Suggestions dropdown
             if viewModel.showSuggestions {
@@ -122,7 +126,7 @@ struct SearchBarView: View {
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, DesignTokens.spacingMD)
         .animation(.easeInOut(duration: 0.2), value: viewModel.showSuggestions)
     }
 
@@ -133,11 +137,12 @@ struct SearchBarView: View {
         VStack(spacing: 0) {
             if viewModel.isSearching {
                 ProgressView()
+                    .tint(DesignTokens.accentCyan)
                     .padding()
             } else if viewModel.showNoResults {
                 // Requirement 2.4
                 Text("No destinations found")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(DesignTokens.textSecondary)
                     .font(.subheadline)
                     .padding()
                     .accessibilityLabel("No destinations found")
@@ -148,9 +153,9 @@ struct SearchBarView: View {
                     } label: {
                         HStack {
                             Image(systemName: "mappin.circle.fill")
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(DesignTokens.accentCyan)
                             Text(suggestion.name)
-                                .foregroundStyle(.primary)
+                                .foregroundStyle(DesignTokens.textPrimary)
                                 .lineLimit(1)
                             Spacer()
                         }
@@ -160,24 +165,22 @@ struct SearchBarView: View {
                     .accessibilityLabel("Select \(suggestion.name)")
 
                     if suggestion.id != viewModel.suggestions.last?.id {
-                        Divider().padding(.leading, 40)
+                        Divider()
+                            .overlay(DesignTokens.surfaceGlassBorder)
+                            .padding(.leading, 40)
                     }
                 }
             }
         }
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-        .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
-        .padding(.top, 4)
+        .glassmorphic(cornerRadius: DesignTokens.radiusMD)
+        .padding(.top, DesignTokens.spacingXS)
     }
 
     // MARK: - Selection
 
-    /// On selection, create a CityMarker and set the binding to trigger globe zoom.
-    /// Requirements: 2.3
     private func selectSuggestion(_ suggestion: DestinationSuggestion) {
         let marker = CityMarker(
-            name: suggestion.name,
+            name: suggestion.name.components(separatedBy: ",").first ?? suggestion.name,
             latitude: suggestion.latitude,
             longitude: suggestion.longitude
         )
@@ -190,7 +193,7 @@ struct SearchBarView: View {
 
 #Preview {
     ZStack {
-        Color.black.ignoresSafeArea()
+        DesignTokens.backgroundPrimary.ignoresSafeArea()
         VStack {
             SearchBarView(selectedCity: .constant(nil))
             Spacer()
