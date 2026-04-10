@@ -1,0 +1,421 @@
+import SwiftUI
+
+// MARK: - Recommendations ViewModel
+
+/// Manages hotel and restaurant recommendation state, refresh, and exclusion tracking.
+/// Validates: Requirements 7.1, 7.2, 7.3, 7.4, 7.5
+@MainActor
+final class RecommendationsViewModel: ObservableObject {
+
+    // Data
+    @Published var hotels: [PlaceRecommendation] = []
+    @Published var restaurants: [PlaceRecommendation] = []
+    @Published var hotelFiltersBroadened: Bool = false
+    @Published var restaurantFiltersBroadened: Bool = false
+
+    // Loading state
+    @Published var isLoadingHotels: Bool = false
+    @Published var isLoadingRestaurants: Bool = false
+    @Published var hotelError: String?
+    @Published var restaurantError: String?
+
+    // Selection
+    @Published var selectedHotel: PlaceRecommendation?
+
+    // Exclusion tracking for refresh (Req 7.4)
+    private var excludedHotelIds: [String] = []
+    private var excludedRestaurantIds: [String] = []
+
+    // Query parameters
+    let latitude: Double
+    let longitude: Double
+    let hotelPriceRange: String?
+    let hotelVibe: String?
+    let restaurantPriceRange: String?
+    let cuisineType: String?
+
+    /// Callback when hotel selection changes (triggers cost recalculation).
+    var onHotelSelectionChanged: ((PlaceRecommendation?) -> Void)?
+
+    init(
+        latitude: Double,
+        longitude: Double,
+        hotelPriceRange: String? = nil,
+        hotelVibe: String? = nil,
+        restaurantPriceRange: String? = nil,
+        cuisineType: String? = nil
+    ) {
+        self.latitude = latitude
+        self.longitude = longitude
+        self.hotelPriceRange = hotelPriceRange
+        self.hotelVibe = hotelVibe
+        self.restaurantPriceRange = restaurantPriceRange
+        self.cuisineType = cuisineType
+    }
+
+    // MARK: - Load Initial Data
+
+    func loadAll() async {
+        async let h: () = loadHotels()
+        async let r: () = loadRestaurants()
+        _ = await (h, r)
+    }
+
+    // MARK: - Hotels (Req 7.1)
+
+    func loadHotels() async {
+        isLoadingHotels = true
+        hotelError = nil
+
+        var queryItems = [
+            URLQueryItem(name: "latitude", value: String(latitude)),
+            URLQueryItem(name: "longitude", value: String(longitude)),
+        ]
+        if let hotelPriceRange { queryItems.append(URLQueryItem(name: "price_range", value: hotelPriceRange)) }
+        if let hotelVibe { queryItems.append(URLQueryItem(name: "vibe", value: hotelVibe)) }
+        for id in excludedHotelIds {
+            queryItems.append(URLQueryItem(name: "excluded_ids", value: id))
+        }
+
+        do {
+            let response: PlacesResponse = try await APIClient.shared.request(
+                .get, path: "/places/hotels", queryItems: queryItems
+            )
+            hotels = response.results
+            hotelFiltersBroadened = response.filtersBroadened
+            // Auto-select first hotel if none selected
+            if selectedHotel == nil, let first = hotels.first {
+                selectHotel(first)
+            }
+        } catch let error as APIError {
+            hotelError = error.errorDescription
+        } catch {
+            hotelError = "Failed to load hotels. Please try again."
+        }
+
+        isLoadingHotels = false
+    }
+
+    // MARK: - Restaurants (Req 7.2)
+
+    func loadRestaurants() async {
+        isLoadingRestaurants = true
+        restaurantError = nil
+
+        var queryItems = [
+            URLQueryItem(name: "latitude", value: String(latitude)),
+            URLQueryItem(name: "longitude", value: String(longitude)),
+        ]
+        if let restaurantPriceRange { queryItems.append(URLQueryItem(name: "price_range", value: restaurantPriceRange)) }
+        if let cuisineType { queryItems.append(URLQueryItem(name: "cuisine", value: cuisineType)) }
+        for id in excludedRestaurantIds {
+            queryItems.append(URLQueryItem(name: "excluded_ids", value: id))
+        }
+
+        do {
+            let response: PlacesResponse = try await APIClient.shared.request(
+                .get, path: "/places/restaurants", queryItems: queryItems
+            )
+            restaurants = response.results
+            restaurantFiltersBroadened = response.filtersBroadened
+        } catch let error as APIError {
+            restaurantError = error.errorDescription
+        } catch {
+            restaurantError = "Failed to load restaurants. Please try again."
+        }
+
+        isLoadingRestaurants = false
+    }
+
+    // MARK: - Refresh (Req 7.4)
+
+    func refreshHotels() async {
+        excludedHotelIds.append(contentsOf: hotels.map(\.placeId))
+        await loadHotels()
+    }
+
+    func refreshRestaurants() async {
+        excludedRestaurantIds.append(contentsOf: restaurants.map(\.placeId))
+        await loadRestaurants()
+    }
+
+    // MARK: - Selection
+
+    func selectHotel(_ hotel: PlaceRecommendation) {
+        selectedHotel = hotel
+        onHotelSelectionChanged?(hotel)
+    }
+}
+
+
+// MARK: - Recommendations View
+
+/// Displays top 3 hotel and restaurant recommendations with refresh and filter-broadened indication.
+/// Validates: Requirements 7.1, 7.2, 7.3, 7.4, 7.5
+struct RecommendationsView: View {
+
+    @ObservedObject var viewModel: RecommendationsViewModel
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                hotelsSection
+                restaurantsSection
+            }
+            .padding(16)
+        }
+        .task {
+            if viewModel.hotels.isEmpty && viewModel.restaurants.isEmpty {
+                await viewModel.loadAll()
+            }
+        }
+    }
+
+    // MARK: - Hotels Section (Req 7.1, 7.3)
+
+    private var hotelsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label("Hotels", systemImage: "building.2")
+                    .font(.title3.weight(.bold))
+                Spacer()
+                refreshButton(isLoading: viewModel.isLoadingHotels) {
+                    Task { await viewModel.refreshHotels() }
+                }
+                .accessibilityLabel("Refresh hotels")
+            }
+
+            if viewModel.hotelFiltersBroadened {
+                filtersBroadenedBanner
+            }
+
+            if viewModel.isLoadingHotels {
+                loadingPlaceholder
+            } else if let error = viewModel.hotelError {
+                errorBanner(message: error) {
+                    Task { await viewModel.loadHotels() }
+                }
+            } else if viewModel.hotels.isEmpty {
+                emptyPlaceholder(text: "No hotels found")
+            } else {
+                ForEach(viewModel.hotels) { hotel in
+                    PlaceCard(
+                        place: hotel,
+                        isSelected: viewModel.selectedHotel?.placeId == hotel.placeId,
+                        onTap: { viewModel.selectHotel(hotel) }
+                    )
+                }
+            }
+        }
+    }
+
+    // MARK: - Restaurants Section (Req 7.2, 7.3)
+
+    private var restaurantsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label("Restaurants", systemImage: "fork.knife")
+                    .font(.title3.weight(.bold))
+                Spacer()
+                refreshButton(isLoading: viewModel.isLoadingRestaurants) {
+                    Task { await viewModel.refreshRestaurants() }
+                }
+                .accessibilityLabel("Refresh restaurants")
+            }
+
+            if viewModel.restaurantFiltersBroadened {
+                filtersBroadenedBanner
+            }
+
+            if viewModel.isLoadingRestaurants {
+                loadingPlaceholder
+            } else if let error = viewModel.restaurantError {
+                errorBanner(message: error) {
+                    Task { await viewModel.loadRestaurants() }
+                }
+            } else if viewModel.restaurants.isEmpty {
+                emptyPlaceholder(text: "No restaurants found")
+            } else {
+                ForEach(viewModel.restaurants) { restaurant in
+                    PlaceCard(place: restaurant, isSelected: false, onTap: nil)
+                }
+            }
+        }
+    }
+
+    // MARK: - Shared Components
+
+    private func refreshButton(isLoading: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            if isLoading {
+                ProgressView()
+                    .controlSize(.small)
+            } else {
+                Image(systemName: "arrow.clockwise")
+            }
+        }
+        .disabled(isLoading)
+    }
+
+    private var filtersBroadenedBanner: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "info.circle.fill")
+                .foregroundStyle(.orange)
+            Text("Filters were broadened to show more results")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+        .accessibilityLabel("Filters were broadened to show more results")
+    }
+
+    private var loadingPlaceholder: some View {
+        HStack {
+            Spacer()
+            ProgressView()
+                .padding(.vertical, 24)
+            Spacer()
+        }
+    }
+
+    private func emptyPlaceholder(text: String) -> some View {
+        Text(text)
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.vertical, 16)
+    }
+
+    private func errorBanner(message: String, retry: @escaping () -> Void) -> some View {
+        VStack(spacing: 8) {
+            Label(message, systemImage: "exclamationmark.triangle.fill")
+                .font(.subheadline)
+                .foregroundStyle(.red)
+            Button("Retry", action: retry)
+                .font(.caption.weight(.medium))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(12)
+        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+
+// MARK: - Place Card (Req 7.3)
+
+/// Displays a single place recommendation with name, rating, price level, and image.
+struct PlaceCard: View {
+
+    let place: PlaceRecommendation
+    let isSelected: Bool
+    let onTap: (() -> Void)?
+
+    var body: some View {
+        Button {
+            onTap?()
+        } label: {
+            HStack(spacing: 12) {
+                // Image (Req 7.3)
+                placeImage
+
+                // Info
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(place.name)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+
+                    HStack(spacing: 8) {
+                        Label(String(format: "%.1f", place.rating), systemImage: "star.fill")
+                            .foregroundStyle(.orange)
+                        if !place.priceLevel.isEmpty {
+                            Text(place.priceLevel)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .font(.caption)
+                }
+
+                Spacer()
+
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.orange)
+                        .font(.title3)
+                }
+            }
+            .padding(12)
+            .background(
+                isSelected ? Color.orange.opacity(0.08) : Color(.systemGray6),
+                in: RoundedRectangle(cornerRadius: 12)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(isSelected ? Color.orange : Color.clear, lineWidth: 1.5)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(place.name), rating \(String(format: "%.1f", place.rating)), \(place.priceLevel)")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    @ViewBuilder
+    private var placeImage: some View {
+        if let urlString = place.imageUrl, let url = URL(string: urlString) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                default:
+                    imagePlaceholder
+                }
+            }
+            .frame(width: 64, height: 64)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        } else {
+            imagePlaceholder
+        }
+    }
+
+    private var imagePlaceholder: some View {
+        RoundedRectangle(cornerRadius: 8)
+            .fill(Color(.systemGray5))
+            .frame(width: 64, height: 64)
+            .overlay(
+                Image(systemName: "photo")
+                    .foregroundStyle(.secondary)
+            )
+    }
+}
+
+// MARK: - Preview
+
+#Preview {
+    let vm = RecommendationsViewModel(
+        latitude: 35.6762,
+        longitude: 139.6503,
+        hotelPriceRange: "$$",
+        restaurantPriceRange: "$$"
+    )
+    // Inject sample data for preview
+    vm.hotels = [
+        PlaceRecommendation(placeId: "h1", name: "Park Hyatt Tokyo", rating: 4.6, priceLevel: "$$$", imageUrl: nil, latitude: 35.6867, longitude: 139.6906),
+        PlaceRecommendation(placeId: "h2", name: "The Peninsula Tokyo", rating: 4.7, priceLevel: "$$$", imageUrl: nil, latitude: 35.6750, longitude: 139.7630),
+        PlaceRecommendation(placeId: "h3", name: "Aman Tokyo", rating: 4.8, priceLevel: "$$$$", imageUrl: nil, latitude: 35.6860, longitude: 139.7640),
+    ]
+    vm.restaurants = [
+        PlaceRecommendation(placeId: "r1", name: "Sushi Dai", rating: 4.7, priceLevel: "$$", imageUrl: nil, latitude: 35.6655, longitude: 139.7710),
+        PlaceRecommendation(placeId: "r2", name: "Ichiran Ramen", rating: 4.5, priceLevel: "$", imageUrl: nil, latitude: 35.6600, longitude: 139.7000),
+        PlaceRecommendation(placeId: "r3", name: "Gonpachi Nishi-Azabu", rating: 4.3, priceLevel: "$$", imageUrl: nil, latitude: 35.6560, longitude: 139.7260),
+    ]
+    vm.selectedHotel = vm.hotels.first
+    return NavigationStack {
+        RecommendationsView(viewModel: vm)
+            .navigationTitle("Recommendations")
+    }
+}
