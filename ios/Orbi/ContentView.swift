@@ -74,13 +74,14 @@ private struct FloatingTabBar: View {
 
 struct ExploreTab: View {
     @StateObject private var networkMonitor = NetworkMonitor.shared
+    @StateObject private var locationManager = LocationManager.shared
     @State private var selectedCity: CityMarker?
     @State private var flowState: ExploreFlowState = .browsing
     @StateObject private var prefsVM = PrefsViewModelHolder()
 
     var body: some View {
         ZStack {
-            GlobeView(selectedCity: $selectedCity)
+            GlobeView(selectedCity: $selectedCity, userLocation: locationManager.currentLocation)
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -143,6 +144,9 @@ struct ExploreTab: View {
                     }
                 }
             } else if newCity == nil { flowState = .browsing }
+        }
+        .onAppear {
+            locationManager.requestLocation()
         }
         .fullScreenCover(isPresented: Binding(
             get: { flowState == .tripResult },
@@ -257,6 +261,9 @@ struct CityCardView: View {
                     .foregroundStyle(DesignTokens.textSecondary)
                     .font(.subheadline)
             }
+
+            // Destination Insights (Req 17.5)
+            DestinationInsightsView(latitude: city.latitude, longitude: city.longitude)
 
             // Plan Trip button with accent gradient
             Button(action: onPlanTrip) {
@@ -583,7 +590,17 @@ struct GeneratingOverlay: View {
 // MARK: - Tabs
 
 struct SavedTripsTab: View {
-    var body: some View { SavedTripsView() }
+    @State private var showTrips = false
+
+    var body: some View {
+        ZStack {
+            DesignTokens.backgroundPrimary.ignoresSafeArea()
+        }
+        .onAppear { showTrips = true }
+        .sheet(isPresented: $showTrips) {
+            SavedTripsView()
+        }
+    }
 }
 
 struct ProfileTab: View {
@@ -597,7 +614,7 @@ struct ProfileTab: View {
                             .font(.system(size: 48))
                             .foregroundStyle(DesignTokens.accentCyan)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Traveler")
+                            Text(authService.displayName ?? authService.userId ?? "Traveler")
                                 .font(.headline)
                                 .foregroundStyle(DesignTokens.textPrimary)
                             Text("Orbi Explorer")
@@ -607,7 +624,26 @@ struct ProfileTab: View {
                     }
                     .padding(.vertical, 8)
                 }
+                Section("Account") {
+                    NavigationLink {
+                        Text("Settings")
+                            .navigationTitle("Settings")
+                    } label: {
+                        Label("Settings", systemImage: "gearshape")
+                    }
+                    NavigationLink {
+                        SavedTripsView()
+                    } label: {
+                        Label("Saved Trips", systemImage: "suitcase")
+                    }
+                }
                 Section("Preferences") {
+                    NavigationLink {
+                        Text("Preferences")
+                            .navigationTitle("Preferences")
+                    } label: {
+                        Label("Preferences", systemImage: "slider.horizontal.3")
+                    }
                     Label("Notifications", systemImage: "bell")
                     Label("Appearance", systemImage: "paintbrush")
                 }

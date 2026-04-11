@@ -157,9 +157,9 @@ class TestSearchDestinations:
 
 class TestGetPopularCities:
     @pytest.mark.asyncio
-    async def test_returns_20_cities(self):
+    async def test_returns_all_cities(self):
         cities = await get_popular_cities()
-        assert len(cities) == 20
+        assert len(cities) == 40
 
     @pytest.mark.asyncio
     async def test_cities_have_required_fields(self):
@@ -168,13 +168,25 @@ class TestGetPopularCities:
             assert "name" in city
             assert "latitude" in city
             assert "longitude" in city
+            assert "category" in city
 
     @pytest.mark.asyncio
     async def test_caches_results(self):
         from backend.services.cache import get_cached
-        from backend.services.search import POPULAR_CITIES_CACHE_KEY
 
         await get_popular_cities()
-        cached = get_cached(POPULAR_CITIES_CACHE_KEY)
+        cached = get_cached("search:popular_cities:all")
         assert cached is not None
-        assert len(cached) == 20
+        assert len(cached) == 40
+
+    @pytest.mark.asyncio
+    async def test_filter_by_category(self):
+        cities = await get_popular_cities(category="Foodie")
+        assert len(cities) > 0
+        for city in cities:
+            assert city["category"] == "Foodie"
+
+    @pytest.mark.asyncio
+    async def test_filter_unknown_category_returns_empty(self):
+        cities = await get_popular_cities(category="Unknown")
+        assert len(cities) == 0

@@ -89,53 +89,62 @@ POPULAR_CITIES_CACHE_KEY = "search:popular_cities"
 POPULAR_CITIES_TTL = 604800  # 7 days
 
 POPULAR_CITIES: list[dict[str, Any]] = [
-    {"name": "Tokyo, Japan", "latitude": 35.6762, "longitude": 139.6503},
-    {"name": "Paris, France", "latitude": 48.8566, "longitude": 2.3522},
-    {"name": "London, UK", "latitude": 51.5074, "longitude": -0.1278},
-    {"name": "New York, USA", "latitude": 40.7128, "longitude": -74.0060},
-    {"name": "Rome, Italy", "latitude": 41.9028, "longitude": 12.4964},
-    {"name": "Barcelona, Spain", "latitude": 41.3851, "longitude": 2.1734},
-    {"name": "Bangkok, Thailand", "latitude": 13.7563, "longitude": 100.5018},
-    {"name": "Dubai, UAE", "latitude": 25.2048, "longitude": 55.2708},
-    {"name": "Istanbul, Turkey", "latitude": 41.0082, "longitude": 28.9784},
-    {"name": "Sydney, Australia", "latitude": -33.8688, "longitude": 151.2093},
-    {"name": "Singapore", "latitude": 1.3521, "longitude": 103.8198},
-    {"name": "Amsterdam, Netherlands", "latitude": 52.3676, "longitude": 4.9041},
-    {"name": "Seoul, South Korea", "latitude": 37.5665, "longitude": 126.9780},
-    {"name": "Lisbon, Portugal", "latitude": 38.7223, "longitude": -9.1393},
-    {"name": "Prague, Czech Republic", "latitude": 50.0755, "longitude": 14.4378},
-    {"name": "Bali, Indonesia", "latitude": -8.3405, "longitude": 115.0920},
-    {"name": "Cape Town, South Africa", "latitude": -33.9249, "longitude": 18.4241},
-    {"name": "Rio de Janeiro, Brazil", "latitude": -22.9068, "longitude": -43.1729},
-    {"name": "Marrakech, Morocco", "latitude": 31.6295, "longitude": -7.9811},
-    {"name": "Kyoto, Japan", "latitude": 35.0116, "longitude": 135.7681},
-    {"name": "Buenos Aires, Argentina", "latitude": -34.6037, "longitude": -58.3816},
-    {"name": "Mexico City, Mexico", "latitude": 19.4326, "longitude": -99.1332},
-    {"name": "Cairo, Egypt", "latitude": 30.0444, "longitude": 31.2357},
-    {"name": "Mumbai, India", "latitude": 19.0760, "longitude": 72.8777},
-    {"name": "Athens, Greece", "latitude": 37.9838, "longitude": 23.7275},
-    {"name": "Vienna, Austria", "latitude": 48.2082, "longitude": 16.3738},
-    {"name": "Berlin, Germany", "latitude": 52.5200, "longitude": 13.4050},
-    {"name": "Havana, Cuba", "latitude": 23.1136, "longitude": -82.3666},
-    {"name": "Reykjavik, Iceland", "latitude": 64.1466, "longitude": -21.9426},
-    {"name": "Santorini, Greece", "latitude": 36.3932, "longitude": 25.4615},
-    {"name": "Cancun, Mexico", "latitude": 21.1619, "longitude": -86.8515},
-    {"name": "Maldives", "latitude": 3.2028, "longitude": 73.2207},
-    {"name": "Petra, Jordan", "latitude": 30.3285, "longitude": 35.4444},
-    {"name": "Machu Picchu, Peru", "latitude": -13.1631, "longitude": -72.5450},
-    {"name": "Queenstown, New Zealand", "latitude": -45.0312, "longitude": 168.6626},
-    {"name": "Dubrovnik, Croatia", "latitude": 42.6507, "longitude": 18.0944},
-    {"name": "Hanoi, Vietnam", "latitude": 21.0278, "longitude": 105.8342},
-    {"name": "Nairobi, Kenya", "latitude": -1.2921, "longitude": 36.8219},
-    {"name": "Zanzibar, Tanzania", "latitude": -6.1659, "longitude": 39.2026},
-    {"name": "Cartagena, Colombia", "latitude": 10.3910, "longitude": -75.5364},
+    {"name": "Tokyo, Japan", "latitude": 35.6762, "longitude": 139.6503, "category": "Foodie"},
+    {"name": "Paris, France", "latitude": 48.8566, "longitude": 2.3522, "category": "Foodie"},
+    {"name": "London, UK", "latitude": 51.5074, "longitude": -0.1278, "category": "Adventure"},
+    {"name": "New York, USA", "latitude": 40.7128, "longitude": -74.0060, "category": "Nightlife"},
+    {"name": "Rome, Italy", "latitude": 41.9028, "longitude": 12.4964, "category": "Foodie"},
+    {"name": "Barcelona, Spain", "latitude": 41.3851, "longitude": 2.1734, "category": "Nightlife"},
+    {"name": "Bangkok, Thailand", "latitude": 13.7563, "longitude": 100.5018, "category": "Foodie"},
+    {"name": "Dubai, UAE", "latitude": 25.2048, "longitude": 55.2708, "category": "Adventure"},
+    {"name": "Istanbul, Turkey", "latitude": 41.0082, "longitude": 28.9784, "category": "Foodie"},
+    {"name": "Sydney, Australia", "latitude": -33.8688, "longitude": 151.2093, "category": "Adventure"},
+    {"name": "Singapore", "latitude": 1.3521, "longitude": 103.8198, "category": "Foodie"},
+    {"name": "Amsterdam, Netherlands", "latitude": 52.3676, "longitude": 4.9041, "category": "Nightlife"},
+    {"name": "Seoul, South Korea", "latitude": 37.5665, "longitude": 126.9780, "category": "Foodie"},
+    {"name": "Lisbon, Portugal", "latitude": 38.7223, "longitude": -9.1393, "category": "Relaxation"},
+    {"name": "Prague, Czech Republic", "latitude": 50.0755, "longitude": 14.4378, "category": "Nightlife"},
+    {"name": "Bali, Indonesia", "latitude": -8.3405, "longitude": 115.0920, "category": "Relaxation"},
+    {"name": "Cape Town, South Africa", "latitude": -33.9249, "longitude": 18.4241, "category": "Adventure"},
+    {"name": "Rio de Janeiro, Brazil", "latitude": -22.9068, "longitude": -43.1729, "category": "Nightlife"},
+    {"name": "Marrakech, Morocco", "latitude": 31.6295, "longitude": -7.9811, "category": "Adventure"},
+    {"name": "Kyoto, Japan", "latitude": 35.0116, "longitude": 135.7681, "category": "Relaxation"},
+    {"name": "Buenos Aires, Argentina", "latitude": -34.6037, "longitude": -58.3816, "category": "Nightlife"},
+    {"name": "Mexico City, Mexico", "latitude": 19.4326, "longitude": -99.1332, "category": "Foodie"},
+    {"name": "Cairo, Egypt", "latitude": 30.0444, "longitude": 31.2357, "category": "Adventure"},
+    {"name": "Mumbai, India", "latitude": 19.0760, "longitude": 72.8777, "category": "Foodie"},
+    {"name": "Athens, Greece", "latitude": 37.9838, "longitude": 23.7275, "category": "Relaxation"},
+    {"name": "Vienna, Austria", "latitude": 48.2082, "longitude": 16.3738, "category": "Relaxation"},
+    {"name": "Berlin, Germany", "latitude": 52.5200, "longitude": 13.4050, "category": "Nightlife"},
+    {"name": "Havana, Cuba", "latitude": 23.1136, "longitude": -82.3666, "category": "Adventure"},
+    {"name": "Reykjavik, Iceland", "latitude": 64.1466, "longitude": -21.9426, "category": "Adventure"},
+    {"name": "Santorini, Greece", "latitude": 36.3932, "longitude": 25.4615, "category": "Relaxation"},
+    {"name": "Cancun, Mexico", "latitude": 21.1619, "longitude": -86.8515, "category": "Relaxation"},
+    {"name": "Maldives", "latitude": 3.2028, "longitude": 73.2207, "category": "Relaxation"},
+    {"name": "Petra, Jordan", "latitude": 30.3285, "longitude": 35.4444, "category": "Adventure"},
+    {"name": "Machu Picchu, Peru", "latitude": -13.1631, "longitude": -72.5450, "category": "Adventure"},
+    {"name": "Queenstown, New Zealand", "latitude": -45.0312, "longitude": 168.6626, "category": "Adventure"},
+    {"name": "Dubrovnik, Croatia", "latitude": 42.6507, "longitude": 18.0944, "category": "Relaxation"},
+    {"name": "Hanoi, Vietnam", "latitude": 21.0278, "longitude": 105.8342, "category": "Foodie"},
+    {"name": "Nairobi, Kenya", "latitude": -1.2921, "longitude": 36.8219, "category": "Adventure"},
+    {"name": "Zanzibar, Tanzania", "latitude": -6.1659, "longitude": 39.2026, "category": "Relaxation"},
+    {"name": "Cartagena, Colombia", "latitude": 10.3910, "longitude": -75.5364, "category": "Nightlife"},
 ]
 
 
-async def get_popular_cities() -> list[dict[str, Any]]:
-    """Return curated list of popular travel cities with 7-day cache."""
-    cached = get_cached(POPULAR_CITIES_CACHE_KEY)
+async def get_popular_cities(category: str | None = None) -> list[dict[str, Any]]:
+    """Return curated list of popular travel cities with 7-day cache.
+
+    Optionally filter by category tag (Req 4.3).
+    """
+    cache_key = f"{POPULAR_CITIES_CACHE_KEY}:{category or 'all'}"
+    cached = get_cached(cache_key)
     if cached is not None:
         return cached
-    set_cached(POPULAR_CITIES_CACHE_KEY, POPULAR_CITIES, ttl=POPULAR_CITIES_TTL)
-    return POPULAR_CITIES
+
+    results = POPULAR_CITIES
+    if category:
+        results = [c for c in results if c.get("category", "").lower() == category.lower()]
+
+    set_cached(cache_key, results, ttl=POPULAR_CITIES_TTL)
+    return results

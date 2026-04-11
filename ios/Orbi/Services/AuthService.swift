@@ -12,6 +12,7 @@ final class AuthService: ObservableObject {
 
     @Published var isAuthenticated = false
     @Published var userId: String?
+    @Published var displayName: String?
     @Published var isLoading = false
     @Published var errorMessage: String?
 
@@ -99,6 +100,7 @@ final class AuthService: ObservableObject {
         KeychainHelper.deleteAll()
         isAuthenticated = false
         userId = nil
+        displayName = nil
     }
 
     // MARK: - Private Helpers
@@ -117,6 +119,7 @@ final class AuthService: ObservableObject {
             try KeychainHelper.save(response.refreshToken, for: .refreshToken)
 
             userId = response.userId
+            displayName = response.name
             isAuthenticated = true
         } catch {
             errorMessage = (error as? APIError)?.errorDescription

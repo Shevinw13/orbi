@@ -7,31 +7,34 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A10000001 /* OrbiApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000001; };
-		A10000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000002; };
-		A10000003 /* GlobeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000003; };
-		A10000004 /* SearchBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000004; };
-		A10000005 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000005; };
-		A10000006 /* DestinationFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000006; };
-		A10000007 /* ItineraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000007; };
-		A10000008 /* MapRouteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000008; };
-		A10000009 /* RecommendationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000009; };
-		A10000010 /* CostBreakdownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010; };
-		A10000011 /* SavedTripsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000011; };
-		A10000012 /* ShareTripView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000012; };
-		A10000013 /* TripResultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000013; };
-		A10000026 /* AppIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000026; };
-		A10000014 /* AuthModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000014; };
-		A10000015 /* DestinationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000015; };
-		A10000016 /* TripModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000016; };
-		A10000017 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000017; };
-		A10000018 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000018; };
-		A10000019 /* SearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000019; };
-		A10000020 /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000020; };
-		A10000021 /* NetworkMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000021; };
-		A10000022 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B10000022; };
-		A10000023 /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000024; };
-		A10000024 /* GlassmorphicModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000025; };
+		A10000001 /* OrbiApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000001 /* OrbiApp.swift */; };
+		A10000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000002 /* ContentView.swift */; };
+		A10000003 /* GlobeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000003 /* GlobeView.swift */; };
+		A10000004 /* SearchBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000004 /* SearchBarView.swift */; };
+		A10000005 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000005 /* LoginView.swift */; };
+		A10000006 /* DestinationFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000006 /* DestinationFlowView.swift */; };
+		A10000007 /* ItineraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000007 /* ItineraryView.swift */; };
+		A10000008 /* MapRouteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000008 /* MapRouteView.swift */; };
+		A10000009 /* RecommendationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000009 /* RecommendationsView.swift */; };
+		A10000010 /* CostBreakdownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000010 /* CostBreakdownView.swift */; };
+		A10000011 /* SavedTripsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000011 /* SavedTripsView.swift */; };
+		A10000012 /* ShareTripView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000012 /* ShareTripView.swift */; };
+		A10000013 /* TripResultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000013 /* TripResultView.swift */; };
+		A10000014 /* AuthModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000014 /* AuthModels.swift */; };
+		A10000015 /* DestinationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000015 /* DestinationModels.swift */; };
+		A10000016 /* TripModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000016 /* TripModels.swift */; };
+		A10000017 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000017 /* APIClient.swift */; };
+		A10000018 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000018 /* AuthService.swift */; };
+		A10000019 /* SearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000019 /* SearchService.swift */; };
+		A10000020 /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000020 /* KeychainHelper.swift */; };
+		A10000021 /* NetworkMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000021 /* NetworkMonitor.swift */; };
+		A10000022 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B10000022 /* Assets.xcassets */; };
+		A10000023 /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000024 /* DesignTokens.swift */; };
+		A10000024 /* GlassmorphicModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000025 /* GlassmorphicModifier.swift */; };
+		A10000026 /* AppIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000026 /* AppIconView.swift */; };
+		A10000027 /* LocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000027 /* LocationManager.swift */; };
+		A10000028 /* TimelineBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000028 /* TimelineBarView.swift */; };
+		A10000029 /* DestinationInsightsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000029 /* DestinationInsightsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -49,7 +52,6 @@
 		B10000011 /* SavedTripsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedTripsView.swift; sourceTree = "<group>"; };
 		B10000012 /* ShareTripView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareTripView.swift; sourceTree = "<group>"; };
 		B10000013 /* TripResultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripResultView.swift; sourceTree = "<group>"; };
-		B10000026 /* AppIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIconView.swift; sourceTree = "<group>"; };
 		B10000014 /* AuthModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthModels.swift; sourceTree = "<group>"; };
 		B10000015 /* DestinationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DestinationModels.swift; sourceTree = "<group>"; };
 		B10000016 /* TripModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripModels.swift; sourceTree = "<group>"; };
@@ -62,6 +64,10 @@
 		B10000023 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B10000024 /* DesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokens.swift; sourceTree = "<group>"; };
 		B10000025 /* GlassmorphicModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassmorphicModifier.swift; sourceTree = "<group>"; };
+		B10000026 /* AppIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIconView.swift; sourceTree = "<group>"; };
+		B10000027 /* LocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationManager.swift; sourceTree = "<group>"; };
+		B10000028 /* TimelineBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineBarView.swift; sourceTree = "<group>"; };
+		B10000029 /* DestinationInsightsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DestinationInsightsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -113,6 +119,8 @@
 				B10000012 /* ShareTripView.swift */,
 				B10000013 /* TripResultView.swift */,
 				B10000026 /* AppIconView.swift */,
+				B10000028 /* TimelineBarView.swift */,
+				B10000029 /* DestinationInsightsView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -133,6 +141,7 @@
 				B10000017 /* APIClient.swift */,
 				B10000018 /* AuthService.swift */,
 				B10000019 /* SearchService.swift */,
+				B10000027 /* LocationManager.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -249,6 +258,9 @@
 				A10000023 /* DesignTokens.swift in Sources */,
 				A10000024 /* GlassmorphicModifier.swift in Sources */,
 				A10000026 /* AppIconView.swift in Sources */,
+				A10000027 /* LocationManager.swift in Sources */,
+				A10000028 /* TimelineBarView.swift in Sources */,
+				A10000029 /* DestinationInsightsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -379,7 +391,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 2GKHZVMW5Q;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Orbi/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -391,7 +403,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.orbi.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.shevinw13.orbi;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -406,7 +418,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 2GKHZVMW5Q;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Orbi/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -418,7 +430,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.orbi.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.shevinw13.orbi;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;

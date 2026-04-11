@@ -36,7 +36,9 @@ async def destinations(
 
 
 @router.get("/popular-cities")
-async def popular_cities():
+async def popular_cities(
+    category: str | None = Query(None, description="Filter by category (Foodie, Adventure, Relaxation, Nightlife)"),
+):
     """Return curated list of popular travel destinations (public, no auth)."""
-    results = await get_popular_cities()
+    results = await get_popular_cities(category=category)
     return {"results": results}

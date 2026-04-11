@@ -47,6 +47,11 @@ class PlaceResult(BaseModel):
     image_url: str | None = None
     latitude: float = 0.0
     longitude: float = 0.0
+    # New optional fields for backward compatibility (Req 15.3, 16.3, 19.5)
+    rating_source: str | None = None
+    review_count: int | None = None
+    price_range_min: float | None = None
+    price_range_max: float | None = None
 
 
 class PlacesResponse(BaseModel):

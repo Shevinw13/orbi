@@ -8,6 +8,7 @@ struct CityMarker: Identifiable, Equatable {
     let name: String
     let latitude: Double
     let longitude: Double
+    var category: String?
 
     static func == (lhs: CityMarker, rhs: CityMarker) -> Bool {
         lhs.id == rhs.id
@@ -30,20 +31,106 @@ struct CityMarker: Identifiable, Equatable {
     ]
 }
 
+// MARK: - ExploreFilterViewModel (Req 4.1, 4.2, 4.4)
+
+@MainActor
+final class ExploreFilterViewModel: ObservableObject {
+    @Published var selectedCategory: ExploreCategory? = nil
+    @Published var allCities: [CityMarker] = CityMarker.popularCities
+
+    var filteredCities: [CityMarker] {
+        guard let category = selectedCategory else { return allCities }
+        return allCities.filter { $0.category?.lowercased() == category.rawValue.lowercased() }
+    }
+
+    func toggleFilter(_ category: ExploreCategory) {
+        if selectedCategory == category {
+            selectedCategory = nil
+        } else {
+            selectedCategory = category
+        }
+        Task { await loadCities(category: selectedCategory) }
+    }
+
+    func loadCities(category: ExploreCategory?) async {
+        struct PopularCitiesResponse: Decodable {
+            let results: [PopularCity]
+        }
+        struct PopularCity: Decodable {
+            let name: String
+            let latitude: Double
+            let longitude: Double
+            let category: String?
+        }
+
+        var queryItems: [URLQueryItem]? = nil
+        if let cat = category {
+            queryItems = [URLQueryItem(name: "category", value: cat.rawValue)]
+        }
+
+        do {
+            let response: PopularCitiesResponse = try await APIClient.shared.request(
+                .get, path: "/search/popular-cities", queryItems: queryItems, requiresAuth: false
+            )
+            let loaded = response.results.map {
+                CityMarker(
+                    name: $0.name.components(separatedBy: ",").first ?? $0.name,
+                    latitude: $0.latitude,
+                    longitude: $0.longitude,
+                    category: $0.category
+                )
+            }
+            if !loaded.isEmpty {
+                allCities = loaded
+            }
+        } catch {
+            // Keep existing cities on error
+        }
+    }
+}
+
+// MARK: - ExploreOverlayViewModel (Req 2.1, 2.2, 2.3, 2.4, 2.5)
+
+@MainActor
+final class ExploreOverlayViewModel: ObservableObject {
+    @Published var overlays: [ExploreOverlay] = []
+    @Published var isLoading: Bool = false
+
+    func loadOverlays(latitude: Double, longitude: Double) async {
+        isLoading = true
+        do {
+            let response: ExploreOverlaysResponse = try await APIClient.shared.request(
+                .get, path: "/explore/overlays",
+                queryItems: [
+                    URLQueryItem(name: "latitude", value: String(latitude)),
+                    URLQueryItem(name: "longitude", value: String(longitude)),
+                ],
+                requiresAuth: false
+            )
+            overlays = response.overlays
+        } catch {
+            overlays = []
+        }
+        isLoading = false
+    }
+}
+
 // MARK: - GlobeView (MapKit 3D Globe)
 
 struct GlobeView: View {
 
     @Binding var selectedCity: CityMarker?
+    var userLocation: CLLocationCoordinate2D?
     @State private var mapPosition: MapCameraPosition = .automatic
-    @State private var cities: [CityMarker] = CityMarker.popularCities
+    @StateObject private var filterVM = ExploreFilterViewModel()
+    @StateObject private var overlayVM = ExploreOverlayViewModel()
     @Namespace private var mapScope
     @State private var currentDistance: Double = 20_000_000
 
     var body: some View {
-        ZStack(alignment: .trailing) {
+        ZStack(alignment: .top) {
             Map(position: $mapPosition, scope: mapScope) {
-                ForEach(cities) { city in
+                ForEach(filterVM.filteredCities) { city in
                     Annotation(city.name, coordinate: city.coordinate) {
                         CityPinView(city: city) {
                             selectCity(city)
@@ -54,27 +141,34 @@ struct GlobeView: View {
             .mapStyle(.imagery(elevation: .realistic))
             .mapControls {}
 
+            VStack(spacing: 0) {
+                // Category filter pills (Req 4.1, 4.2, 4.4)
+                filterPillsRow
+                    .padding(.top, 60)
+
+                Spacer()
+
+                // Explore overlay cards (Req 2.1, 2.4)
+                if !overlayVM.overlays.isEmpty {
+                    overlayCardsRow
+                        .padding(.bottom, DesignTokens.tabBarHeight + 90)
+                }
+            }
+
             // Zoom controls — right side
             VStack(spacing: 8) {
                 Spacer()
-
                 VStack(spacing: 0) {
-                    Button {
-                        zoomIn()
-                    } label: {
+                    Button { zoomIn() } label: {
                         Image(systemName: "plus")
                             .font(.system(size: 18, weight: .semibold))
                             .foregroundStyle(.white)
                             .frame(width: 44, height: 44)
                     }
-
                     Divider()
                         .frame(width: 30)
                         .overlay(Color.white.opacity(0.2))
-
-                    Button {
-                        zoomOut()
-                    } label: {
+                    Button { zoomOut() } label: {
                         Image(systemName: "minus")
                             .font(.system(size: 18, weight: .semibold))
                             .foregroundStyle(.white)
@@ -87,11 +181,13 @@ struct GlobeView: View {
                 .padding(.trailing, 12)
                 .padding(.bottom, DesignTokens.tabBarHeight + 80)
             }
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .onAppear {
+            let center = userLocation ?? LocationManager.defaultLocation
             mapPosition = .camera(
                 MapCamera(
-                    centerCoordinate: CLLocationCoordinate2D(latitude: 30, longitude: 10),
+                    centerCoordinate: center,
                     distance: currentDistance,
                     heading: 0,
                     pitch: 0
@@ -99,7 +195,9 @@ struct GlobeView: View {
             )
         }
         .task {
-            await loadPopularCities()
+            await filterVM.loadCities(category: nil)
+            let loc = userLocation ?? LocationManager.defaultLocation
+            await overlayVM.loadOverlays(latitude: loc.latitude, longitude: loc.longitude)
         }
         .onChange(of: selectedCity) { _, newCity in
             if let city = newCity {
@@ -117,6 +215,38 @@ struct GlobeView: View {
             }
         }
     }
+
+    // MARK: - Filter Pills Row
+
+    private var filterPillsRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: DesignTokens.spacingSM) {
+                ForEach(ExploreCategory.allCases) { category in
+                    FilterPill(
+                        category: category,
+                        isSelected: filterVM.selectedCategory == category,
+                        onTap: { filterVM.toggleFilter(category) }
+                    )
+                }
+            }
+            .padding(.horizontal, DesignTokens.spacingMD)
+        }
+    }
+
+    // MARK: - Overlay Cards Row
+
+    private var overlayCardsRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: DesignTokens.spacingSM) {
+                ForEach(overlayVM.overlays) { overlay in
+                    OverlayCard(overlay: overlay)
+                }
+            }
+            .padding(.horizontal, DesignTokens.spacingMD)
+        }
+    }
+
+    // MARK: - Zoom
 
     private func zoomIn() {
         currentDistance = max(1_000, currentDistance / 3)
@@ -147,10 +277,8 @@ struct GlobeView: View {
     }
 
     private func currentCenterOrDefault() -> CLLocationCoordinate2D {
-        if let city = selectedCity {
-            return city.coordinate
-        }
-        return CLLocationCoordinate2D(latitude: 30, longitude: 10)
+        if let city = selectedCity { return city.coordinate }
+        return userLocation ?? CLLocationCoordinate2D(latitude: 30, longitude: 10)
     }
 
     private func selectCity(_ city: CityMarker) {
@@ -158,33 +286,61 @@ struct GlobeView: View {
         feedback.impactOccurred()
         selectedCity = city
     }
+}
 
-    private func loadPopularCities() async {
-        struct PopularCitiesResponse: Decodable {
-            let results: [PopularCity]
-        }
-        struct PopularCity: Decodable {
-            let name: String
-            let latitude: Double
-            let longitude: Double
-        }
-        do {
-            let response: PopularCitiesResponse = try await APIClient.shared.request(
-                .get, path: "/search/popular-cities", requiresAuth: false
+// MARK: - Filter Pill (Req 4.1, 4.2)
+
+struct FilterPill: View {
+    let category: ExploreCategory
+    let isSelected: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 6) {
+                Image(systemName: category.icon)
+                    .font(.caption)
+                Text(category.rawValue)
+                    .font(.caption.weight(.semibold))
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .foregroundStyle(isSelected ? .white : DesignTokens.textSecondary)
+            .background(
+                Group {
+                    if isSelected {
+                        Capsule().fill(DesignTokens.accentGradient)
+                    } else {
+                        Capsule().fill(.ultraThinMaterial)
+                    }
+                }
             )
-            let loaded = response.results.map {
-                CityMarker(
-                    name: $0.name.components(separatedBy: ",").first ?? $0.name,
-                    latitude: $0.latitude,
-                    longitude: $0.longitude
-                )
-            }
-            if !loaded.isEmpty {
-                cities = loaded
-            }
-        } catch {
-            // Keep hardcoded fallback
+            .clipShape(Capsule())
         }
+        .accessibilityLabel("\(category.rawValue) filter")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+// MARK: - Overlay Card (Req 2.1, 2.4)
+
+struct OverlayCard: View {
+    let overlay: ExploreOverlay
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
+            Text(overlay.title)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(DesignTokens.textPrimary)
+            ForEach(overlay.destinations.prefix(3), id: \.name) { dest in
+                Text(dest.name)
+                    .font(.caption2)
+                    .foregroundStyle(DesignTokens.textSecondary)
+            }
+        }
+        .padding(DesignTokens.spacingSM)
+        .frame(width: 160)
+        .glassmorphic(cornerRadius: DesignTokens.radiusSM)
     }
 }
 
@@ -199,23 +355,17 @@ struct CityPinView: View {
     var body: some View {
         Button(action: onTap) {
             VStack(spacing: 4) {
-                // Pin dot
                 ZStack {
-                    // Glow
                     Circle()
                         .fill(DesignTokens.accentCyan.opacity(0.3))
                         .frame(width: 28, height: 28)
-
                     Circle()
                         .fill(DesignTokens.accentCyan)
                         .frame(width: 14, height: 14)
-
                     Circle()
                         .fill(.white)
                         .frame(width: 6, height: 6)
                 }
-
-                // City name label
                 Text(city.name)
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(.white)

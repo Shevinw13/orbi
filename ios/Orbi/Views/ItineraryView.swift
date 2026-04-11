@@ -107,6 +107,71 @@ final class ItineraryViewModel: ObservableObject {
         recalculateCost()
     }
 
+    // MARK: - Optimize Day (Req 7.1, 7.2, 7.3, 7.4, 7.5)
+
+    func optimizeDay(_ dayNumber: Int) {
+        guard let dayIndex = itinerary.days.firstIndex(where: { $0.dayNumber == dayNumber }) else { return }
+        var slots = itinerary.days[dayIndex].slots
+        guard slots.count >= 3 else { return }
+
+        // Nearest-neighbor algorithm on haversine distance
+        var remaining = Array(slots.dropFirst())
+        var ordered = [slots[0]]
+
+        while !remaining.isEmpty {
+            let current = ordered.last!
+            var nearestIndex = 0
+            var nearestDist = Double.greatestFiniteMagnitude
+            for (i, candidate) in remaining.enumerated() {
+                let dist = haversineDistance(
+                    lat1: current.latitude, lon1: current.longitude,
+                    lat2: candidate.latitude, lon2: candidate.longitude
+                )
+                if dist < nearestDist {
+                    nearestDist = dist
+                    nearestIndex = i
+                }
+            }
+            ordered.append(remaining.remove(at: nearestIndex))
+        }
+
+        withAnimation(.easeInOut(duration: 0.3)) {
+            itinerary.days[dayIndex].slots = ordered
+        }
+
+        // Recalculate travel times between consecutive activities
+        recalculateTravelTimes(for: dayIndex)
+        recalculateCost()
+    }
+
+    private func recalculateTravelTimes(for dayIndex: Int) {
+        let slots = itinerary.days[dayIndex].slots
+        for i in 0..<slots.count {
+            if i < slots.count - 1 {
+                let dist = haversineDistance(
+                    lat1: slots[i].latitude, lon1: slots[i].longitude,
+                    lat2: slots[i + 1].latitude, lon2: slots[i + 1].longitude
+                )
+                // Rough estimate: walking ~5 km/h
+                let travelMin = max(5, Int(dist / 5000.0 * 60.0))
+                itinerary.days[dayIndex].slots[i].travelTimeToNextMin = travelMin
+            } else {
+                itinerary.days[dayIndex].slots[i].travelTimeToNextMin = nil
+            }
+        }
+    }
+
+    private func haversineDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double) -> Double {
+        let R = 6371000.0 // Earth radius in meters
+        let dLat = (lat2 - lat1) * .pi / 180.0
+        let dLon = (lon2 - lon1) * .pi / 180.0
+        let a = sin(dLat / 2) * sin(dLat / 2) +
+                cos(lat1 * .pi / 180.0) * cos(lat2 * .pi / 180.0) *
+                sin(dLon / 2) * sin(dLon / 2)
+        let c = 2 * atan2(sqrt(a), sqrt(1 - a))
+        return R * c
+    }
+
     // MARK: - Cost recalculation (Req 8.5)
 
     func recalculateCost() {
@@ -263,6 +328,11 @@ struct ItineraryView: View {
                     handleCrossDayDrop(providers: providers, targetDay: day.dayNumber)
                 }
 
+            // Timeline bar (Req 8.1, 8.2, 8.3, 8.4)
+            TimelineBarView(day: day) { _ in
+                // Scroll handled by parent ScrollView
+            }
+
             ForEach(Array(day.slots.enumerated()), id: \.element.id) { index, slot in
                 slotRow(slot: slot, dayNumber: day.dayNumber, isLast: index == day.slots.count - 1)
             }
@@ -286,6 +356,17 @@ struct ItineraryView: View {
                 .font(.title3.weight(.bold))
                 .foregroundStyle(DesignTokens.textPrimary)
             Spacer()
+            // Optimize Day button (Req 7.1, 7.5)
+            Button {
+                viewModel.optimizeDay(day.dayNumber)
+            } label: {
+                Label("Optimize", systemImage: "arrow.triangle.swap")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(DesignTokens.accentCyan)
+            }
+            .disabled(day.slots.count < 3)
+            .opacity(day.slots.count < 3 ? 0.4 : 1.0)
+            .accessibilityLabel("Optimize Day \(day.dayNumber)")
             Button {
                 mapRouteDay = day
             } label: {
@@ -357,6 +438,18 @@ struct ItineraryView: View {
         .padding(.horizontal, DesignTokens.spacingMD)
         .padding(.vertical, DesignTokens.spacingXS)
         .contentShape(Rectangle())
+        .scaleEffect(viewModel.draggingSlot == slot ? 1.05 : 1.0)
+        .shadow(color: viewModel.draggingSlot == slot ? DesignTokens.accentCyan.opacity(0.3) : .clear, radius: 8, y: 4)
+        .animation(.easeInOut(duration: 0.2), value: viewModel.draggingSlot == slot)
+        .overlay(alignment: .top) {
+            // Drop indicator line
+            if viewModel.draggingSlot != nil && viewModel.draggingSlot != slot {
+                Rectangle()
+                    .fill(DesignTokens.accentCyan)
+                    .frame(height: 2)
+                    .padding(.horizontal, DesignTokens.spacingLG)
+            }
+        }
         .onTapGesture {
             viewModel.selectedSlot = slot
             viewModel.showDetail = true
@@ -366,6 +459,28 @@ struct ItineraryView: View {
             viewModel.draggingFromDay = dayNumber
             let data = "\(dayNumber)|\(slot.activityName)".data(using: .utf8) ?? Data()
             return NSItemProvider(item: data as NSData, typeIdentifier: "public.text")
+        }
+        .onDrop(of: [.text], isTargeted: nil) { _ in
+            // Drop indicator: accept drop at this position
+            if let dragging = viewModel.draggingSlot,
+               let fromDay = viewModel.draggingFromDay,
+               fromDay == dayNumber {
+                if let dayIdx = viewModel.itinerary.days.firstIndex(where: { $0.dayNumber == dayNumber }),
+                   let fromIdx = viewModel.itinerary.days[dayIdx].slots.firstIndex(where: { $0 == dragging }),
+                   let toIdx = viewModel.itinerary.days[dayIdx].slots.firstIndex(where: { $0 == slot }),
+                   fromIdx != toIdx {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        viewModel.itinerary.days[dayIdx].slots.move(
+                            fromOffsets: IndexSet(integer: fromIdx),
+                            toOffset: toIdx > fromIdx ? toIdx + 1 : toIdx
+                        )
+                    }
+                    viewModel.recalculateCost()
+                }
+            }
+            viewModel.draggingSlot = nil
+            viewModel.draggingFromDay = nil
+            return true
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(slot.timeSlot): \(slot.activityName), \(slot.estimatedDurationMin) minutes")

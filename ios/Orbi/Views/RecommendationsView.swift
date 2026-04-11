@@ -21,6 +21,7 @@ final class RecommendationsViewModel: ObservableObject {
 
     // Selection
     @Published var selectedHotel: PlaceRecommendation?
+    @Published var selectedRestaurants: Set<String> = []
 
     // Exclusion tracking for refresh (Req 7.4)
     private var excludedHotelIds: [String] = []
@@ -144,6 +145,16 @@ final class RecommendationsViewModel: ObservableObject {
         selectedHotel = hotel
         onHotelSelectionChanged?(hotel)
     }
+
+    // MARK: - Restaurant Selection (Req 11.1, 11.2, 11.3, 11.4)
+
+    func toggleRestaurant(_ restaurant: PlaceRecommendation) {
+        if selectedRestaurants.contains(restaurant.placeId) {
+            selectedRestaurants.remove(restaurant.placeId)
+        } else {
+            selectedRestaurants.insert(restaurant.placeId)
+        }
+    }
 }
 
 
@@ -240,7 +251,11 @@ struct RecommendationsView: View {
                 emptyPlaceholder(text: "No restaurants found")
             } else {
                 ForEach(viewModel.restaurants) { restaurant in
-                    PlaceCard(place: restaurant, isSelected: false, onTap: nil)
+                    PlaceCard(
+                        place: restaurant,
+                        isSelected: viewModel.selectedRestaurants.contains(restaurant.placeId),
+                        onTap: { viewModel.toggleRestaurant(restaurant) }
+                    )
                 }
             }
         }
@@ -343,6 +358,25 @@ struct PlaceCard: View {
                         }
                     }
                     .font(.caption)
+
+                    // Rating source and review count (Req 15.1, 15.2, 15.4)
+                    if let source = place.ratingSource {
+                        Text(source)
+                            .font(.caption2)
+                            .foregroundStyle(DesignTokens.textTertiary)
+                    }
+                    if let count = place.reviewCount {
+                        Text("Based on \(count) reviews")
+                            .font(.caption2)
+                            .foregroundStyle(DesignTokens.textTertiary)
+                    }
+
+                    // Price range indicators (Req 16.1, 16.2, 16.4)
+                    if let minPrice = place.priceRangeMin, let maxPrice = place.priceRangeMax {
+                        Text("$\(Int(minPrice))–$\(Int(maxPrice))")
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(DesignTokens.accentCyan)
+                    }
                 }
 
                 Spacer()

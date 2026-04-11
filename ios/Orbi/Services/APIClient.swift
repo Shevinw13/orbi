@@ -66,10 +66,10 @@ actor APIClient {
     #if targetEnvironment(simulator)
     private let baseURL = URL(string: "http://localhost:8000")!
     #else
-    private let baseURL = URL(string: "http://10.0.0.36:8000")!  // Mac's local IP for physical device
+    private let baseURL = URL(string: "https://orbi-89zi.onrender.com")!
     #endif
     #else
-    private let baseURL = URL(string: "https://api.orbi.app")!
+    private let baseURL = URL(string: "https://orbi-89zi.onrender.com")!
     #endif
 
     private let session: URLSession

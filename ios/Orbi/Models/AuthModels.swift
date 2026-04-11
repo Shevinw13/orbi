@@ -39,4 +39,5 @@ struct AuthResponse: Decodable {
     let tokenType: String
     let expiresIn: Int
     let userId: String
+    let name: String?
 }

@@ -108,8 +108,28 @@ struct PlaceRecommendation: Codable, Identifiable, Equatable {
     let imageUrl: String?
     let latitude: Double
     let longitude: Double
+    // New optional fields (Req 15, 16, 19.5)
+    let ratingSource: String?
+    let reviewCount: Int?
+    let priceRangeMin: Double?
+    let priceRangeMax: Double?
 
     var id: String { placeId }
+
+    // Custom init for backward compatibility — all new fields default to nil
+    init(placeId: String, name: String, rating: Double, priceLevel: String, imageUrl: String?, latitude: Double, longitude: Double, ratingSource: String? = nil, reviewCount: Int? = nil, priceRangeMin: Double? = nil, priceRangeMax: Double? = nil) {
+        self.placeId = placeId
+        self.name = name
+        self.rating = rating
+        self.priceLevel = priceLevel
+        self.imageUrl = imageUrl
+        self.latitude = latitude
+        self.longitude = longitude
+        self.ratingSource = ratingSource
+        self.reviewCount = reviewCount
+        self.priceRangeMin = priceRangeMin
+        self.priceRangeMax = priceRangeMax
+    }
 }
 
 /// Response wrapper for place recommendations from `GET /places/hotels` and `GET /places/restaurants`.

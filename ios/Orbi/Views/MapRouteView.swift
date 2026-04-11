@@ -39,6 +39,16 @@ final class MapRouteViewModel: ObservableObject {
         segments.reduce(0) { $0 + $1.travelTimeMinutes }
     }
 
+    /// Walking time total in minutes (Req 9.3).
+    var walkingTime: Int {
+        segments.filter { $0.transportType == .walking }.reduce(0) { $0 + $1.travelTimeMinutes }
+    }
+
+    /// Driving time total in minutes (Req 9.3).
+    var drivingTime: Int {
+        segments.filter { $0.transportType == .automobile }.reduce(0) { $0 + $1.travelTimeMinutes }
+    }
+
     init(day: ItineraryDay) {
         self.dayNumber = day.dayNumber
         self.slots = day.slots.filter { $0.latitude != 0 && $0.longitude != 0 }
@@ -72,15 +82,37 @@ final class MapRouteViewModel: ObservableObject {
             do {
                 let response = try await directions.calculate()
                 if let route = response.routes.first {
+                    let walkingMinutes = Int(route.expectedTravelTime / 60)
                     let segment = RouteSegment(
                         from: origin,
                         to: destination,
                         route: route,
-                        travelTimeMinutes: Int(route.expectedTravelTime / 60),
+                        travelTimeMinutes: walkingMinutes,
                         distanceMeters: route.distance,
                         transportType: .walking
                     )
                     computed.append(segment)
+
+                    // Req 9.4: If walking > 30 min, also calculate driving alternative
+                    if walkingMinutes > 30 {
+                        let drivingRequest = MKDirections.Request()
+                        drivingRequest.source = MKMapItem(placemark: sourcePlacemark)
+                        drivingRequest.destination = MKMapItem(placemark: destPlacemark)
+                        drivingRequest.transportType = .automobile
+                        let drivingDirections = MKDirections(request: drivingRequest)
+                        if let drivingResponse = try? await drivingDirections.calculate(),
+                           let drivingRoute = drivingResponse.routes.first {
+                            let drivingSegment = RouteSegment(
+                                from: origin,
+                                to: destination,
+                                route: drivingRoute,
+                                travelTimeMinutes: Int(drivingRoute.expectedTravelTime / 60),
+                                distanceMeters: drivingRoute.distance,
+                                transportType: .automobile
+                            )
+                            computed.append(drivingSegment)
+                        }
+                    }
                 }
             } catch {
                 request.transportType = .automobile
@@ -345,15 +377,15 @@ struct MapRouteView: View {
     // MARK: - Route Summary Card
 
     private var routeSummaryCard: some View {
-        HStack(spacing: DesignTokens.spacingLG) {
+        HStack(spacing: DesignTokens.spacingSM) {
             VStack(spacing: 4) {
                 Image(systemName: "map")
                     .foregroundStyle(DesignTokens.accentCyan)
-                Text("Total Distance")
+                Text("Distance")
                     .font(.caption2)
                     .foregroundStyle(DesignTokens.textSecondary)
                 Text(viewModel.formattedDistance(viewModel.totalDistance))
-                    .font(.subheadline.weight(.bold))
+                    .font(.caption.weight(.bold))
                     .foregroundStyle(DesignTokens.textPrimary)
             }
 
@@ -364,11 +396,41 @@ struct MapRouteView: View {
             VStack(spacing: 4) {
                 Image(systemName: "clock")
                     .foregroundStyle(DesignTokens.accentCyan)
-                Text("Total Time")
+                Text("Total")
                     .font(.caption2)
                     .foregroundStyle(DesignTokens.textSecondary)
                 Text("\(viewModel.totalTime) min")
-                    .font(.subheadline.weight(.bold))
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(DesignTokens.textPrimary)
+            }
+
+            Divider()
+                .frame(height: 40)
+                .overlay(DesignTokens.surfaceGlassBorder)
+
+            VStack(spacing: 4) {
+                Image(systemName: "figure.walk")
+                    .foregroundStyle(DesignTokens.accentCyan)
+                Text("Walking")
+                    .font(.caption2)
+                    .foregroundStyle(DesignTokens.textSecondary)
+                Text("\(viewModel.walkingTime) min")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(DesignTokens.textPrimary)
+            }
+
+            Divider()
+                .frame(height: 40)
+                .overlay(DesignTokens.surfaceGlassBorder)
+
+            VStack(spacing: 4) {
+                Image(systemName: "car")
+                    .foregroundStyle(DesignTokens.accentCyan)
+                Text("Driving")
+                    .font(.caption2)
+                    .foregroundStyle(DesignTokens.textSecondary)
+                Text("\(viewModel.drivingTime) min")
+                    .font(.caption.weight(.bold))
                     .foregroundStyle(DesignTokens.textPrimary)
             }
 
@@ -383,16 +445,16 @@ struct MapRouteView: View {
                     .font(.caption2)
                     .foregroundStyle(DesignTokens.textSecondary)
                 Text("\(viewModel.slots.count)")
-                    .font(.subheadline.weight(.bold))
+                    .font(.caption.weight(.bold))
                     .foregroundStyle(DesignTokens.textPrimary)
             }
         }
-        .padding(DesignTokens.spacingMD)
+        .padding(DesignTokens.spacingSM)
         .frame(maxWidth: .infinity)
         .glassmorphic(cornerRadius: DesignTokens.radiusMD)
         .padding(.horizontal, DesignTokens.spacingMD)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Route summary: \(viewModel.formattedDistance(viewModel.totalDistance)), \(viewModel.totalTime) minutes, \(viewModel.slots.count) stops")
+        .accessibilityLabel("Route summary: \(viewModel.formattedDistance(viewModel.totalDistance)), \(viewModel.totalTime) minutes total, \(viewModel.walkingTime) walking, \(viewModel.drivingTime) driving, \(viewModel.slots.count) stops")
     }
 
     // MARK: - Stop List
@@ -429,12 +491,26 @@ struct MapRouteView: View {
             if index < viewModel.segments.count {
                 let segment = viewModel.segments[index]
                 HStack(spacing: 4) {
-                    Image(systemName: "arrow.right")
+                    Image(systemName: segment.transportType == .walking ? "figure.walk" : "car")
                         .font(.caption2)
                     Text(viewModel.formattedDistance(segment.distanceMeters))
                         .font(.caption2)
+                    Text("· \(segment.travelTimeMinutes) min")
+                        .font(.caption2)
                 }
                 .foregroundStyle(DesignTokens.textSecondary)
+
+                // Ride-hail cost for walking segments > 15 min (Req 10.1, 10.2)
+                if segment.transportType == .walking && segment.travelTimeMinutes > 15 {
+                    let costRange = RideHailEstimator.estimate(distanceMeters: segment.distanceMeters)
+                    HStack(spacing: 4) {
+                        Image(systemName: "car.fill")
+                            .font(.caption2)
+                        Text("$\(Int(costRange.lowerBound))–$\(Int(costRange.upperBound))")
+                            .font(.caption2.weight(.medium))
+                    }
+                    .foregroundStyle(DesignTokens.accentCyan)
+                }
             }
         }
         .padding(DesignTokens.spacingSM)
@@ -466,6 +542,37 @@ struct MapRouteView: View {
             .padding(24)
             .glassmorphic(cornerRadius: DesignTokens.radiusMD)
         }
+    }
+}
+
+// MARK: - RideHailEstimator (Req 10.1, 10.2, 10.3, 10.4)
+
+/// Estimates ride-hail costs using base fare + per-km rate with 0.8x–1.5x range.
+struct RideHailEstimator {
+    struct CityRate {
+        let baseFare: Double
+        let perKmRate: Double
+    }
+
+    static let defaultRate = CityRate(baseFare: 3.0, perKmRate: 1.5)
+
+    static let cityRates: [String: CityRate] = [
+        "tokyo": CityRate(baseFare: 4.0, perKmRate: 2.0),
+        "paris": CityRate(baseFare: 3.5, perKmRate: 1.8),
+        "new york": CityRate(baseFare: 3.0, perKmRate: 2.5),
+        "london": CityRate(baseFare: 4.0, perKmRate: 2.2),
+        "dubai": CityRate(baseFare: 2.0, perKmRate: 1.0),
+        "bangkok": CityRate(baseFare: 1.0, perKmRate: 0.5),
+        "rome": CityRate(baseFare: 3.5, perKmRate: 1.5),
+        "barcelona": CityRate(baseFare: 3.0, perKmRate: 1.3),
+    ]
+
+    static func estimate(distanceMeters: Double, city: String = "") -> ClosedRange<Double> {
+        let rate = cityRates[city.lowercased()] ?? defaultRate
+        let distanceKm = distanceMeters / 1000.0
+        let low = rate.baseFare + distanceKm * rate.perKmRate * 0.8
+        let high = rate.baseFare + distanceKm * rate.perKmRate * 1.5
+        return low...high
     }
 }
 

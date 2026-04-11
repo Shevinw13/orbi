@@ -65,6 +65,8 @@ def _parse_foursquare_result(venue: dict[str, Any]) -> PlaceResult:
         image_url=None,
         latitude=float(location.get("latitude", 0.0)),
         longitude=float(location.get("longitude", 0.0)),
+        rating_source="Foursquare" if venue.get("rating") else None,
+        review_count=venue.get("stats", {}).get("total_ratings") if venue.get("stats") else None,
     )
 
 
@@ -117,6 +119,10 @@ async def _fetch_openai_places(place_type: str, query: PlaceQuery) -> list[dict[
                     "image_url": None,
                     "latitude": float(p.get("latitude", query.latitude)),
                     "longitude": float(p.get("longitude", query.longitude)),
+                    "rating_source": "Aggregated reviews",
+                    "review_count": None,
+                    "price_range_min": None,
+                    "price_range_max": None,
                 }
                 for i, p in enumerate(places)
             ]

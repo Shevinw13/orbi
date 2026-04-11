@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Trip Result Tabs
 
@@ -38,6 +39,7 @@ struct TripResultView: View {
     @State private var savedTripId: String?
     @State private var isSaving: Bool = false
     @State private var saveError: String?
+    @State private var showShareSheet: Bool = false
     @State private var showSaveSuccess: Bool = false
 
     @StateObject private var itineraryVM: ItineraryViewModel
@@ -97,10 +99,14 @@ struct TripResultView: View {
                         .foregroundStyle(DesignTokens.textPrimary)
                 }
                 ToolbarItemGroup(placement: .primaryAction) {
-                    // Share button (Req 10.1)
-                    if let tripId = savedTripId {
-                        ShareTripButton(tripId: tripId)
+                    // Share button (Req 14.5, 14.6)
+                    Button {
+                        showShareSheet = true
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
                     }
+                    .foregroundStyle(DesignTokens.accentCyan)
+                    .accessibilityLabel("Share trip")
                     // Save button (Req 9.1)
                     saveButton
                 }
@@ -116,6 +122,11 @@ struct TripResultView: View {
                 Button("OK") { saveError = nil }
             } message: {
                 Text(saveError ?? "")
+            }
+            .sheet(isPresented: $showShareSheet) {
+                ActivityViewControllerWrapper(
+                    activityItems: [ShareFormatter.formatTrip(itineraryVM.itinerary)]
+                )
             }
             .onAppear {
                 // Wire hotel selection to cost recalculation (Req 8.5)
@@ -306,6 +317,9 @@ struct InlineDaySectionView: View {
             // Day header with map button
             daySectionHeader
 
+            // Timeline bar (Req 8.1, 8.2, 8.3, 8.4)
+            TimelineBarView(day: day) { _ in }
+
             // Slots
             ForEach(Array(day.slots.enumerated()), id: \.element.id) { index, slot in
                 inlineSlotCard(slot: slot, isLast: index == day.slots.count - 1)
@@ -345,6 +359,17 @@ struct InlineDaySectionView: View {
                 .font(.title3.weight(.bold))
                 .foregroundStyle(DesignTokens.textPrimary)
             Spacer()
+            // Optimize Day button (Req 7.1, 7.5)
+            Button {
+                viewModel.optimizeDay(day.dayNumber)
+            } label: {
+                Label("Optimize", systemImage: "arrow.triangle.swap")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(DesignTokens.accentCyan)
+            }
+            .disabled(day.slots.count < 3)
+            .opacity(day.slots.count < 3 ? 0.4 : 1.0)
+            .accessibilityLabel("Optimize Day \(day.dayNumber)")
             Button {
                 mapRouteDay = day
             } label: {
@@ -478,6 +503,20 @@ struct InlineDaySectionView: View {
         default: return .gray
         }
     }
+}
+
+// MARK: - UIActivityViewController Wrapper
+
+/// SwiftUI wrapper for UIActivityViewController to present the system share sheet.
+/// Validates: Requirement 14.6
+struct ActivityViewControllerWrapper: UIViewControllerRepresentable {
+    let activityItems: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 // MARK: - Preview
