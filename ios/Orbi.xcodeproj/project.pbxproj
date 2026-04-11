@@ -35,6 +35,7 @@
 		A10000027 /* LocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000027 /* LocationManager.swift */; };
 		A10000028 /* TimelineBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000028 /* TimelineBarView.swift */; };
 		A10000029 /* DestinationInsightsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000029 /* DestinationInsightsView.swift */; };
+		A10000030 /* ShareFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000030 /* ShareFormatter.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -64,6 +65,7 @@
 		B10000023 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B10000024 /* DesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokens.swift; sourceTree = "<group>"; };
 		B10000025 /* GlassmorphicModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassmorphicModifier.swift; sourceTree = "<group>"; };
+		B10000030 /* ShareFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareFormatter.swift; sourceTree = "<group>"; };
 		B10000026 /* AppIconView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIconView.swift; sourceTree = "<group>"; };
 		B10000027 /* LocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationManager.swift; sourceTree = "<group>"; };
 		B10000028 /* TimelineBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineBarView.swift; sourceTree = "<group>"; };
@@ -151,6 +153,7 @@
 			children = (
 				B10000024 /* DesignTokens.swift */,
 				B10000025 /* GlassmorphicModifier.swift */,
+				B10000030 /* ShareFormatter.swift */,
 				B10000020 /* KeychainHelper.swift */,
 				B10000021 /* NetworkMonitor.swift */,
 			);
