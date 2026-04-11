@@ -121,25 +121,19 @@ struct GlobeView: View {
 
     @Binding var selectedCity: CityMarker?
     var userLocation: CLLocationCoordinate2D?
-    @State private var mapPosition: MapCameraPosition = .automatic
     @StateObject private var filterVM = ExploreFilterViewModel()
     @StateObject private var overlayVM = ExploreOverlayViewModel()
-    @Namespace private var mapScope
     @State private var currentDistance: Double = 20_000_000
 
     var body: some View {
         ZStack(alignment: .top) {
-            Map(position: $mapPosition, scope: mapScope) {
-                ForEach(filterVM.filteredCities) { city in
-                    Annotation(city.name, coordinate: city.coordinate) {
-                        CityPinView(city: city) {
-                            selectCity(city)
-                        }
-                    }
-                }
-            }
-            .mapStyle(.imagery(elevation: .realistic))
-            .mapControls {}
+            ClusterMapView(
+                cities: filterVM.filteredCities,
+                userLocation: userLocation,
+                selectedCity: $selectedCity,
+                cameraDistance: $currentDistance
+            )
+            .ignoresSafeArea()
 
             VStack(spacing: 0) {
                 // Category filter pills (Req 4.1, 4.2, 4.4)
@@ -183,36 +177,10 @@ struct GlobeView: View {
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
-        .onAppear {
-            let center = userLocation ?? LocationManager.defaultLocation
-            mapPosition = .camera(
-                MapCamera(
-                    centerCoordinate: center,
-                    distance: currentDistance,
-                    heading: 0,
-                    pitch: 0
-                )
-            )
-        }
         .task {
             await filterVM.loadCities(category: nil)
             let loc = userLocation ?? LocationManager.defaultLocation
             await overlayVM.loadOverlays(latitude: loc.latitude, longitude: loc.longitude)
-        }
-        .onChange(of: selectedCity) { _, newCity in
-            if let city = newCity {
-                currentDistance = 500_000
-                withAnimation(.easeInOut(duration: 1.2)) {
-                    mapPosition = .camera(
-                        MapCamera(
-                            centerCoordinate: city.coordinate,
-                            distance: 500_000,
-                            heading: 0,
-                            pitch: 45
-                        )
-                    )
-                }
-            }
         }
     }
 
@@ -250,40 +218,13 @@ struct GlobeView: View {
 
     private func zoomIn() {
         currentDistance = max(1_000, currentDistance / 3)
-        withAnimation(.easeInOut(duration: 0.5)) {
-            mapPosition = .camera(
-                MapCamera(
-                    centerCoordinate: currentCenterOrDefault(),
-                    distance: currentDistance,
-                    heading: 0,
-                    pitch: currentDistance < 100_000 ? 60 : 0
-                )
-            )
-        }
     }
 
     private func zoomOut() {
         currentDistance = min(30_000_000, currentDistance * 3)
-        withAnimation(.easeInOut(duration: 0.5)) {
-            mapPosition = .camera(
-                MapCamera(
-                    centerCoordinate: currentCenterOrDefault(),
-                    distance: currentDistance,
-                    heading: 0,
-                    pitch: 0
-                )
-            )
-        }
-    }
-
-    private func currentCenterOrDefault() -> CLLocationCoordinate2D {
-        if let city = selectedCity { return city.coordinate }
-        return userLocation ?? CLLocationCoordinate2D(latitude: 30, longitude: 10)
     }
 
     private func selectCity(_ city: CityMarker) {
-        let feedback = UIImpactFeedbackGenerator(style: .medium)
-        feedback.impactOccurred()
         selectedCity = city
     }
 }

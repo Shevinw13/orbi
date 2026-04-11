@@ -26,6 +26,7 @@ final class MapRouteViewModel: ObservableObject {
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
     @Published var selectedSlot: ItinerarySlot?
+    @Published var transportMode: MKDirectionsTransportType = .walking
 
     let dayNumber: Int
 
@@ -54,7 +55,7 @@ final class MapRouteViewModel: ObservableObject {
         self.slots = day.slots.filter { $0.latitude != 0 && $0.longitude != 0 }
     }
 
-    /// Calculate routes between all consecutive activity stops.
+    /// Calculate routes between all consecutive activity stops using the selected transport mode.
     func calculateRoutes() async {
         guard slots.count >= 2 else { return }
         isLoading = true
@@ -75,50 +76,33 @@ final class MapRouteViewModel: ObservableObject {
             let request = MKDirections.Request()
             request.source = MKMapItem(placemark: sourcePlacemark)
             request.destination = MKMapItem(placemark: destPlacemark)
-            request.transportType = .walking
+            request.transportType = transportMode
 
             let directions = MKDirections(request: request)
 
             do {
                 let response = try await directions.calculate()
                 if let route = response.routes.first {
-                    let walkingMinutes = Int(route.expectedTravelTime / 60)
                     let segment = RouteSegment(
                         from: origin,
                         to: destination,
                         route: route,
-                        travelTimeMinutes: walkingMinutes,
+                        travelTimeMinutes: Int(route.expectedTravelTime / 60),
                         distanceMeters: route.distance,
-                        transportType: .walking
+                        transportType: transportMode
                     )
                     computed.append(segment)
-
-                    // Req 9.4: If walking > 30 min, also calculate driving alternative
-                    if walkingMinutes > 30 {
-                        let drivingRequest = MKDirections.Request()
-                        drivingRequest.source = MKMapItem(placemark: sourcePlacemark)
-                        drivingRequest.destination = MKMapItem(placemark: destPlacemark)
-                        drivingRequest.transportType = .automobile
-                        let drivingDirections = MKDirections(request: drivingRequest)
-                        if let drivingResponse = try? await drivingDirections.calculate(),
-                           let drivingRoute = drivingResponse.routes.first {
-                            let drivingSegment = RouteSegment(
-                                from: origin,
-                                to: destination,
-                                route: drivingRoute,
-                                travelTimeMinutes: Int(drivingRoute.expectedTravelTime / 60),
-                                distanceMeters: drivingRoute.distance,
-                                transportType: .automobile
-                            )
-                            computed.append(drivingSegment)
-                        }
-                    }
                 }
             } catch {
-                request.transportType = .automobile
-                let drivingDirections = MKDirections(request: request)
+                // Fallback to the other transport mode
+                let fallbackType: MKDirectionsTransportType = transportMode == .walking ? .automobile : .walking
+                let fallbackRequest = MKDirections.Request()
+                fallbackRequest.source = MKMapItem(placemark: sourcePlacemark)
+                fallbackRequest.destination = MKMapItem(placemark: destPlacemark)
+                fallbackRequest.transportType = fallbackType
+                let fallbackDirections = MKDirections(request: fallbackRequest)
                 do {
-                    let response = try await drivingDirections.calculate()
+                    let response = try await fallbackDirections.calculate()
                     if let route = response.routes.first {
                         let segment = RouteSegment(
                             from: origin,
@@ -126,18 +110,23 @@ final class MapRouteViewModel: ObservableObject {
                             route: route,
                             travelTimeMinutes: Int(route.expectedTravelTime / 60),
                             distanceMeters: route.distance,
-                            transportType: .automobile
+                            transportType: fallbackType
                         )
                         computed.append(segment)
                     }
                 } catch {
-                    // Skip this segment silently
+                    // Skip segment
                 }
             }
         }
 
         segments = computed
         isLoading = false
+    }
+
+    func switchTransport(to mode: MKDirectionsTransportType) {
+        transportMode = mode
+        Task { await calculateRoutes() }
     }
 
     /// Formatted distance string for a segment.
@@ -349,9 +338,53 @@ struct MapRouteView: View {
                 )
                 .ignoresSafeArea(edges: .bottom)
 
-                // Bottom panel: route summary + stop list
+                // Bottom panel: transport toggle + route summary + stop list
                 if !viewModel.segments.isEmpty {
-                    VStack(spacing: 0) {
+                    VStack(spacing: DesignTokens.spacingSM) {
+                        // Walk / Drive toggle
+                        HStack(spacing: 0) {
+                            Button {
+                                viewModel.switchTransport(to: .walking)
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "figure.walk")
+                                    Text("Walk")
+                                }
+                                .font(.subheadline.weight(.semibold))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                                .foregroundStyle(viewModel.transportMode == .walking ? .white : DesignTokens.textSecondary)
+                                .background(
+                                    viewModel.transportMode == .walking
+                                        ? AnyShapeStyle(DesignTokens.accentGradient)
+                                        : AnyShapeStyle(Color.clear)
+                                )
+                                .clipShape(RoundedRectangle(cornerRadius: DesignTokens.radiusSM))
+                            }
+
+                            Button {
+                                viewModel.switchTransport(to: .automobile)
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "car.fill")
+                                    Text("Drive")
+                                }
+                                .font(.subheadline.weight(.semibold))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                                .foregroundStyle(viewModel.transportMode == .automobile ? .white : DesignTokens.textSecondary)
+                                .background(
+                                    viewModel.transportMode == .automobile
+                                        ? AnyShapeStyle(DesignTokens.accentGradient)
+                                        : AnyShapeStyle(Color.clear)
+                                )
+                                .clipShape(RoundedRectangle(cornerRadius: DesignTokens.radiusSM))
+                            }
+                        }
+                        .padding(3)
+                        .glassmorphic(cornerRadius: DesignTokens.radiusMD)
+                        .padding(.horizontal, DesignTokens.spacingMD)
+
                         routeSummaryCard
                         stopListView
                     }

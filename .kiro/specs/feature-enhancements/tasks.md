@@ -105,7 +105,7 @@ The iOS client uses Swift/SwiftUI with MapKit. The backend uses Python/FastAPI w
     - Hide overlays gracefully if backend is unreachable
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5_
 
-  - [ ] 4.8 Implement map marker clustering with MKMapView
+  - [x] 4.8 Implement map marker clustering with MKMapView
     - Create a `ClusterMapView` UIViewRepresentable using `MKMapView` with `MKClusterAnnotation` support
     - Replace the SwiftUI `Map` in `GlobeView` with `ClusterMapView` for the explore tab
     - Configure clustering threshold so markers group at low zoom and expand on zoom-in

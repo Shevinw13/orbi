@@ -1,6 +1,35 @@
 import SwiftUI
 import UIKit
 
+// MARK: - Share Formatter
+
+struct ShareFormatter {
+    static func formatTrip(_ itinerary: ItineraryResponse) -> String {
+        var lines: [String] = []
+        lines.append("\(itinerary.numDays)-Day \(itinerary.destination) \(itinerary.vibe) Trip")
+        lines.append("")
+        for day in itinerary.days {
+            lines.append("Day \(day.dayNumber):")
+            if day.slots.isEmpty {
+                lines.append("  No activities planned")
+            } else {
+                for slot in day.slots {
+                    lines.append("  \(slot.activityName) (\(slot.timeSlot))")
+                }
+            }
+            if let restaurant = day.restaurant {
+                lines.append("  🍽 \(restaurant.name)")
+            }
+            lines.append("")
+        }
+        if itinerary.days.isEmpty {
+            lines.append("No activities planned")
+            lines.append("")
+        }
+        return lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
 // MARK: - Trip Result Tabs
 
 /// Tabs displayed after itinerary generation.
