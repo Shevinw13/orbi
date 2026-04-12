@@ -68,7 +68,8 @@ struct TripResultView: View {
             hotelPriceRange: hotelPriceRange,
             hotelVibe: hotelVibe,
             restaurantPriceRange: restaurantPriceRange,
-            cuisineType: cuisineType
+            cuisineType: cuisineType,
+            cityName: city.name
         ))
         _costVM = StateObject(wrappedValue: CostViewModel(
             itinerary: itinerary,
@@ -550,6 +551,8 @@ struct InlineDaySectionView: View {
                     }
                 }
                 .padding(.top, 4)
+
+                ExternalLinkButton(placeName: slot.activityName, city: viewModel.itinerary.destination)
             }
             .padding(DesignTokens.spacingSM)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -582,12 +585,31 @@ struct InlineDaySectionView: View {
                     .foregroundStyle(DesignTokens.textPrimary)
                 HStack(spacing: 8) {
                     Text(restaurant.cuisine)
-                    Text(restaurant.priceLevel)
-                    Label(String(format: "%.1f", restaurant.rating), systemImage: "star.fill")
-                        .foregroundStyle(.yellow)
+                    Text(PriceFormatter.restaurantPriceFromTier(restaurant.priceLevel))
+                    if restaurant.rating > 0 {
+                        Label(String(format: "%.1f", restaurant.rating), systemImage: "star.fill")
+                            .foregroundStyle(.yellow)
+                    }
                 }
                 .font(.caption2)
                 .foregroundStyle(DesignTokens.textSecondary)
+
+                Text("Estimated")
+                    .font(.caption2)
+                    .foregroundStyle(DesignTokens.textTertiary)
+
+                // Origin label
+                if let origin = restaurant.origin {
+                    Text(origin == "user" ? "Selected by you" : "Suggested")
+                        .font(.caption2)
+                        .foregroundStyle(DesignTokens.textTertiary)
+                } else {
+                    Text("Suggested")
+                        .font(.caption2)
+                        .foregroundStyle(DesignTokens.textTertiary)
+                }
+
+                ExternalLinkButton(placeName: restaurant.name, city: viewModel.itinerary.destination)
             }
             .padding(.vertical, 8)
 
@@ -634,7 +656,7 @@ struct ActivityViewControllerWrapper: UIViewControllerRepresentable {
                     ItinerarySlot(timeSlot: "Morning", activityName: "Tsukiji Outer Market", description: "Explore fresh seafood stalls and street food", latitude: 35.6654, longitude: 139.7707, estimatedDurationMin: 120, travelTimeToNextMin: 15, estimatedCostUsd: 20),
                     ItinerarySlot(timeSlot: "Afternoon", activityName: "Senso-ji Temple", description: "Visit Tokyo's oldest temple in Asakusa", latitude: 35.7148, longitude: 139.7967, estimatedDurationMin: 90, travelTimeToNextMin: 20, estimatedCostUsd: 0),
                 ],
-                restaurant: ItineraryRestaurant(name: "Sushi Dai", cuisine: "Sushi", priceLevel: "$", rating: 4.7, latitude: 35.6655, longitude: 139.7710, imageUrl: nil)
+                restaurant: ItineraryRestaurant(name: "Sushi Dai", cuisine: "Sushi", priceLevel: "$", rating: 4.7, latitude: 35.6655, longitude: 139.7710, imageUrl: nil, origin: "ai")
             ),
         ]
     )

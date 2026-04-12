@@ -461,6 +461,20 @@ struct PreferencesOverlay: View {
                     }
                 }
 
+                // Restaurant Selector (Req 1.1)
+                if let selectorVM = viewModel.restaurantSelectorVM {
+                    RestaurantSelector(
+                        viewModel: selectorVM,
+                        selectedIds: $viewModel.selectedRestaurantIds,
+                        maxSelections: 3
+                    )
+                    .task {
+                        if selectorVM.restaurants.isEmpty {
+                            await selectorVM.loadRestaurants()
+                        }
+                    }
+                }
+
                 // Family Friendly toggle
                 Toggle(isOn: $viewModel.familyFriendly) {
                     HStack(spacing: DesignTokens.spacingSM) {

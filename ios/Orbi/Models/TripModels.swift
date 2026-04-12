@@ -15,6 +15,16 @@ struct TripPreferencesRequest: Encodable {
     let cuisineType: String?
     let vibe: String
     let familyFriendly: Bool
+    let selectedRestaurants: [SelectedRestaurantPayload]?
+}
+
+/// Payload for a user-selected restaurant sent to the backend.
+struct SelectedRestaurantPayload: Encodable {
+    let name: String
+    let cuisine: String
+    let priceLevel: String
+    let latitude: Double
+    let longitude: Double
 }
 
 // MARK: - Itinerary Response
@@ -62,6 +72,7 @@ struct ItineraryRestaurant: Codable {
     let latitude: Double
     let longitude: Double
     let imageUrl: String?
+    let origin: String?
 }
 
 // MARK: - Replace Activity

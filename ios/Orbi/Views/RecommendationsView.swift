@@ -34,6 +34,7 @@ final class RecommendationsViewModel: ObservableObject {
     let hotelVibe: String?
     let restaurantPriceRange: String?
     let cuisineType: String?
+    let cityName: String
 
     /// Callback when hotel selection changes (triggers cost recalculation).
     var onHotelSelectionChanged: ((PlaceRecommendation?) -> Void)?
@@ -44,7 +45,8 @@ final class RecommendationsViewModel: ObservableObject {
         hotelPriceRange: String? = nil,
         hotelVibe: String? = nil,
         restaurantPriceRange: String? = nil,
-        cuisineType: String? = nil
+        cuisineType: String? = nil,
+        cityName: String = ""
     ) {
         self.latitude = latitude
         self.longitude = longitude
@@ -52,6 +54,7 @@ final class RecommendationsViewModel: ObservableObject {
         self.hotelVibe = hotelVibe
         self.restaurantPriceRange = restaurantPriceRange
         self.cuisineType = cuisineType
+        self.cityName = cityName
     }
 
     // MARK: - Load Initial Data
@@ -216,6 +219,7 @@ struct RecommendationsView: View {
                         place: hotel,
                         placeType: .hotel,
                         isSelected: viewModel.selectedHotel?.placeId == hotel.placeId,
+                        city: viewModel.cityName,
                         onTap: { viewModel.selectHotel(hotel) }
                     )
                 }
@@ -256,6 +260,7 @@ struct RecommendationsView: View {
                         place: restaurant,
                         placeType: .restaurant,
                         isSelected: viewModel.selectedRestaurants.contains(restaurant.placeId),
+                        city: viewModel.cityName,
                         onTap: { viewModel.toggleRestaurant(restaurant) }
                     )
                 }
@@ -345,6 +350,7 @@ struct PlaceCard: View {
     let place: PlaceRecommendation
     let placeType: PlaceType
     let isSelected: Bool
+    let city: String
     let onTap: (() -> Void)?
 
     var body: some View {
@@ -361,24 +367,34 @@ struct PlaceCard: View {
                         .lineLimit(2)
 
                     HStack(spacing: 8) {
-                        Label(String(format: "%.1f", place.rating), systemImage: "star.fill")
-                            .foregroundStyle(.yellow)
-                        Text(placeType == .hotel ? place.formattedHotelPrice : place.formattedRestaurantPrice)
+                        if place.rating > 0 {
+                            if let source = place.ratingSource {
+                                Label("\(String(format: "%.1f", place.rating)) (\(source))", systemImage: "star.fill")
+                                    .foregroundStyle(.yellow)
+                            } else {
+                                Label(String(format: "%.1f", place.rating), systemImage: "star.fill")
+                                    .foregroundStyle(.yellow)
+                            }
+                        }
+                        Text(placeType == .hotel
+                             ? PriceFormatter.hotelPrice(min: place.priceRangeMin, max: place.priceRangeMax, tier: place.priceLevel)
+                             : PriceFormatter.restaurantPrice(min: place.priceRangeMin, max: place.priceRangeMax, tier: place.priceLevel))
                             .foregroundStyle(DesignTokens.accentCyan)
                     }
                     .font(.caption)
 
-                    // Rating source and review count (Req 15.1, 15.2, 15.4)
-                    if let source = place.ratingSource {
-                        Text(source)
-                            .font(.caption2)
-                            .foregroundStyle(DesignTokens.textTertiary)
-                    }
+                    Text("Estimated")
+                        .font(.caption2)
+                        .foregroundStyle(DesignTokens.textTertiary)
+
+                    // Review count (Req 8.2)
                     if let count = place.reviewCount {
                         Text("Based on \(count) reviews")
                             .font(.caption2)
                             .foregroundStyle(DesignTokens.textTertiary)
                     }
+
+                    ExternalLinkButton(placeName: place.name, city: city)
                 }
 
                 Spacer()
@@ -398,7 +414,7 @@ struct PlaceCard: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(place.name), rating \(String(format: "%.1f", place.rating)), \(placeType == .hotel ? place.formattedHotelPrice : place.formattedRestaurantPrice)")
+        .accessibilityLabel("\(place.name), rating \(String(format: "%.1f", place.rating)), \(placeType == .hotel ? PriceFormatter.hotelPrice(min: place.priceRangeMin, max: place.priceRangeMax, tier: place.priceLevel) : PriceFormatter.restaurantPrice(min: place.priceRangeMin, max: place.priceRangeMax, tier: place.priceLevel))")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
@@ -439,8 +455,9 @@ struct PlaceCard: View {
     let vm = RecommendationsViewModel(
         latitude: 35.6762,
         longitude: 139.6503,
-        hotelPriceRange: "$",
-        restaurantPriceRange: "$"
+        hotelPriceRange: "$$",
+        restaurantPriceRange: "$$",
+        cityName: "Tokyo"
     )
     vm.hotels = [
         PlaceRecommendation(placeId: "h1", name: "Park Hyatt Tokyo", rating: 4.6, priceLevel: "$$", imageUrl: nil, latitude: 35.6867, longitude: 139.6906),

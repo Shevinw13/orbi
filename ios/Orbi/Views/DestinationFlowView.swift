@@ -69,6 +69,12 @@ final class TripPreferencesViewModel: ObservableObject {
     @Published var submissionError: String?
     @Published var generatedItinerary: ItineraryResponse?
 
+    /// Selected restaurant IDs for pre-selection
+    @Published var selectedRestaurantIds: Set<String> = []
+
+    /// Recommendations view model for restaurant selector
+    @Published var restaurantSelectorVM: RecommendationsViewModel?
+
     /// Guards against double-firing haptic feedback (Req 16.4)
     private var didFireHaptic: Bool = false
 
@@ -76,6 +82,12 @@ final class TripPreferencesViewModel: ObservableObject {
 
     init(city: CityMarker) {
         self.city = city
+        let vm = RecommendationsViewModel(
+            latitude: city.latitude,
+            longitude: city.longitude,
+            cityName: city.name
+        )
+        self.restaurantSelectorVM = vm
     }
 
     func validateDays() -> Int? {
@@ -104,6 +116,23 @@ final class TripPreferencesViewModel: ObservableObject {
         didFireHaptic = false
         guard let days = validateDays() else { return }
 
+        // Build selected restaurant payloads
+        var restaurantPayloads: [SelectedRestaurantPayload]? = nil
+        if let selectorVM = restaurantSelectorVM, !selectedRestaurantIds.isEmpty {
+            let selected = selectorVM.restaurants.filter { selectedRestaurantIds.contains($0.placeId) }
+            if !selected.isEmpty {
+                restaurantPayloads = selected.map {
+                    SelectedRestaurantPayload(
+                        name: $0.name,
+                        cuisine: "",
+                        priceLevel: $0.priceLevel,
+                        latitude: $0.latitude,
+                        longitude: $0.longitude
+                    )
+                }
+            }
+        }
+
         let request = TripPreferencesRequest(
             destination: city.name,
             latitude: city.latitude,
@@ -114,7 +143,8 @@ final class TripPreferencesViewModel: ObservableObject {
             restaurantPriceRange: restaurantPriceRange.rawValue,
             cuisineType: cuisineType.isEmpty ? nil : cuisineType,
             vibe: selectedVibe.rawValue,
-            familyFriendly: familyFriendly
+            familyFriendly: familyFriendly,
+            selectedRestaurants: restaurantPayloads
         )
 
         isLoading = true

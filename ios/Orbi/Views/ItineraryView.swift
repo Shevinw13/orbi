@@ -520,6 +520,8 @@ struct ItineraryView: View {
                 .foregroundStyle(DesignTokens.textSecondary)
 
                 slotActions(slot: slot, dayNumber: dayNumber)
+
+                ExternalLinkButton(placeName: slot.activityName, city: viewModel.itinerary.destination)
             }
             .padding(DesignTokens.spacingSM)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -626,12 +628,31 @@ struct ItineraryView: View {
                     .foregroundStyle(DesignTokens.textPrimary)
                 HStack(spacing: 8) {
                     Text(restaurant.cuisine)
-                    Text(restaurant.priceLevel)
-                    Label(String(format: "%.1f", restaurant.rating), systemImage: "star.fill")
-                        .foregroundStyle(.yellow)
+                    Text(PriceFormatter.restaurantPriceFromTier(restaurant.priceLevel))
+                    if restaurant.rating > 0 {
+                        Label(String(format: "%.1f", restaurant.rating), systemImage: "star.fill")
+                            .foregroundStyle(.yellow)
+                    }
                 }
                 .font(.caption2)
                 .foregroundStyle(DesignTokens.textSecondary)
+
+                Text("Estimated")
+                    .font(.caption2)
+                    .foregroundStyle(DesignTokens.textTertiary)
+
+                // Origin label
+                if let origin = restaurant.origin {
+                    Text(origin == "user" ? "Selected by you" : "Suggested")
+                        .font(.caption2)
+                        .foregroundStyle(DesignTokens.textTertiary)
+                } else {
+                    Text("Suggested")
+                        .font(.caption2)
+                        .foregroundStyle(DesignTokens.textTertiary)
+                }
+
+                ExternalLinkButton(placeName: restaurant.name, city: viewModel.itinerary.destination)
             }
             .padding(.vertical, 8)
 
@@ -874,7 +895,7 @@ struct AddActivitySheet: View {
                     ItinerarySlot(timeSlot: "Afternoon", activityName: "Senso-ji Temple", description: "Visit Tokyo's oldest temple in Asakusa", latitude: 35.7148, longitude: 139.7967, estimatedDurationMin: 90, travelTimeToNextMin: 20, estimatedCostUsd: 0),
                     ItinerarySlot(timeSlot: "Evening", activityName: "Shibuya Crossing", description: "Experience the world's busiest pedestrian crossing", latitude: 35.6595, longitude: 139.7004, estimatedDurationMin: 60, travelTimeToNextMin: nil, estimatedCostUsd: 0)
                 ],
-                restaurant: ItineraryRestaurant(name: "Sushi Dai", cuisine: "Sushi", priceLevel: "$", rating: 4.7, latitude: 35.6655, longitude: 139.7710, imageUrl: nil)
+                restaurant: ItineraryRestaurant(name: "Sushi Dai", cuisine: "Sushi", priceLevel: "$", rating: 4.7, latitude: 35.6655, longitude: 139.7710, imageUrl: nil, origin: "ai")
             ),
             ItineraryDay(
                 dayNumber: 2,

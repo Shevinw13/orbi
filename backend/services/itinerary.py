@@ -22,6 +22,7 @@ from backend.models.itinerary import (
     ItineraryResponse,
     ReplaceActivityRequest,
     RestaurantRecommendation,
+    SelectedRestaurant,
 )
 from backend.services.cache import get_cached, set_cached
 
@@ -169,6 +170,51 @@ def _parse_itinerary_response(raw_json: dict) -> ItineraryResponse:
     )
 
 
+def _inject_selected_restaurants(
+    itinerary: ItineraryResponse,
+    selected_restaurants: list[SelectedRestaurant],
+) -> ItineraryResponse:
+    """Inject user-selected restaurants into the first N days of the itinerary.
+
+    - Each selected restaurant appears at most once.
+    - Sets origin="user" on injected restaurants and origin="ai" on AI-generated ones.
+    - Remaining days keep their AI-generated restaurants.
+    """
+    # Mark all existing restaurants as AI-generated
+    for day in itinerary.days:
+        if day.restaurant and day.restaurant.origin is None:
+            day.restaurant.origin = "ai"
+
+    if not selected_restaurants:
+        return itinerary
+
+    # Deduplicate by name (case-insensitive)
+    seen_names: set[str] = set()
+    unique_selected: list[SelectedRestaurant] = []
+    for sr in selected_restaurants:
+        key = sr.name.strip().lower()
+        if key not in seen_names:
+            seen_names.add(key)
+            unique_selected.append(sr)
+
+    # Inject into the first N days
+    for i, sr in enumerate(unique_selected):
+        if i >= len(itinerary.days):
+            break
+        itinerary.days[i].restaurant = RestaurantRecommendation(
+            name=sr.name,
+            cuisine=sr.cuisine,
+            price_level=sr.price_level,
+            rating=0.0,
+            latitude=sr.latitude,
+            longitude=sr.longitude,
+            image_url=None,
+            origin="user",
+        )
+
+    return itinerary
+
+
 async def generate_itinerary(request: ItineraryRequest) -> ItineraryResponse:
     """Generate an AI-powered itinerary, with Redis caching.
 
@@ -237,10 +283,14 @@ async def generate_itinerary(request: ItineraryRequest) -> ItineraryResponse:
 
     itinerary = _parse_itinerary_response(raw_itinerary)
 
-    # 4. Validate travel times (Req 4.8)
+    # 4. Inject user-selected restaurants if provided
+    if request.selected_restaurants:
+        itinerary = _inject_selected_restaurants(itinerary, request.selected_restaurants)
+
+    # 5. Validate travel times (Req 4.8)
     itinerary = _validate_travel_times(itinerary)
 
-    # 5. Cache the result (Req 13.4)
+    # 6. Cache the result (Req 13.4)
     set_cached(cache_key, raw_itinerary, ttl=CACHE_TTL)
     logger.info("Cached itinerary key=%s", cache_key)
 

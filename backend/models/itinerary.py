@@ -27,6 +27,16 @@ class ReplaceActivityRequest(BaseModel):
     )
 
 
+class SelectedRestaurant(BaseModel):
+    """A user-selected restaurant passed into itinerary generation."""
+
+    name: str
+    cuisine: str
+    price_level: str
+    latitude: float
+    longitude: float
+
+
 class ItineraryRequest(BaseModel):
     """POST /trips/generate request body."""
 
@@ -40,6 +50,9 @@ class ItineraryRequest(BaseModel):
     cuisine_type: str | None = Field(None, description="Preferred cuisine type")
     vibe: str = Field(..., description="Trip vibe: Foodie, Adventure, Relaxed, Nightlife")
     family_friendly: bool = Field(False, description="Enable family-friendly mode")
+    selected_restaurants: list[SelectedRestaurant] | None = Field(
+        None, description="User pre-selected restaurants to inject into meal slots"
+    )
 
 
 class RestaurantRecommendation(BaseModel):
@@ -52,6 +65,7 @@ class RestaurantRecommendation(BaseModel):
     latitude: float
     longitude: float
     image_url: str | None = None
+    origin: str | None = Field(None, description="'user' or 'ai' - source of this restaurant")
 
 
 class ActivitySlot(BaseModel):

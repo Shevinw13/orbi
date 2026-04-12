@@ -22,6 +22,30 @@ logger = logging.getLogger(__name__)
 FOURSQUARE_SEARCH_URL = "https://api.foursquare.com/v3/places/search"
 TOP_N = 3
 
+# Tier-to-range mapping tables (Req 9.1, 9.2, 9.3)
+RESTAURANT_TIER_RANGES: dict[str, tuple[float, float]] = {
+    "$": (10.0, 20.0),
+    "$$": (20.0, 40.0),
+    "$$$": (40.0, 70.0),
+}
+
+HOTEL_TIER_RANGES: dict[str, tuple[float, float]] = {
+    "$": (60.0, 100.0),
+    "$$": (120.0, 180.0),
+    "$$$": (200.0, 300.0),
+}
+
+# Mid-tier defaults for unrecognized strings
+RESTAURANT_MID_TIER = (20.0, 40.0)
+HOTEL_MID_TIER = (120.0, 180.0)
+
+
+def _get_price_range(tier: str, place_type: str) -> tuple[float, float]:
+    """Return (min, max) price range for a tier string and place type."""
+    table = HOTEL_TIER_RANGES if place_type == "lodging" else RESTAURANT_TIER_RANGES
+    default = HOTEL_MID_TIER if place_type == "lodging" else RESTAURANT_MID_TIER
+    return table.get(tier, default)
+
 
 def _use_foursquare() -> bool:
     return bool(settings.foursquare_api_key)
@@ -55,18 +79,30 @@ async def _fetch_foursquare(place_type: str, query: PlaceQuery, keyword: str | N
     return resp.json().get("results", [])
 
 
-def _parse_foursquare_result(venue: dict[str, Any]) -> PlaceResult:
+def _parse_foursquare_result(venue: dict[str, Any], place_type: str = "restaurant") -> PlaceResult:
     location = venue.get("location", {})
+    price_level = venue.get("price_level", "")
+
+    # Use existing numeric price data if available; otherwise apply tier mapping
+    price_range_min = venue.get("price_range_min")
+    price_range_max = venue.get("price_range_max")
+    if not price_range_min or not price_range_max:
+        tier_min, tier_max = _get_price_range(price_level, place_type)
+        price_range_min = tier_min
+        price_range_max = tier_max
+
     return PlaceResult(
         place_id=venue.get("fsq_id", ""),
         name=venue.get("name", ""),
         rating=float(venue.get("rating", 0.0)),
-        price_level="",
+        price_level=price_level,
         image_url=None,
         latitude=float(location.get("latitude", 0.0)),
         longitude=float(location.get("longitude", 0.0)),
         rating_source="Foursquare" if venue.get("rating") else None,
         review_count=venue.get("stats", {}).get("total_ratings") if venue.get("stats") else None,
+        price_range_min=price_range_min,
+        price_range_max=price_range_max,
     )
 
 
@@ -121,8 +157,8 @@ async def _fetch_openai_places(place_type: str, query: PlaceQuery) -> list[dict[
                     "longitude": float(p.get("longitude", query.longitude)),
                     "rating_source": "Aggregated reviews",
                     "review_count": None,
-                    "price_range_min": None,
-                    "price_range_max": None,
+                    "price_range_min": _get_price_range(p.get("price_level", "$$"), "lodging" if place_type == "lodging" else "restaurant")[0],
+                    "price_range_max": _get_price_range(p.get("price_level", "$$"), "lodging" if place_type == "lodging" else "restaurant")[1],
                 }
                 for i, p in enumerate(places)
             ]
@@ -147,7 +183,7 @@ async def _search_places(place_type: Literal["lodging", "restaurant"], query: Pl
         try:
             if _use_foursquare():
                 raw = await _fetch_foursquare(place_type, query, keyword=keyword)
-                all_results = [_parse_foursquare_result(r).model_dump() for r in raw]
+                all_results = [_parse_foursquare_result(r, place_type).model_dump() for r in raw]
             else:
                 all_results = await _fetch_openai_places(place_type, query)
         except Exception:
@@ -168,7 +204,7 @@ async def _search_places(place_type: Literal["lodging", "restaurant"], query: Pl
         try:
             if _use_foursquare():
                 raw_broad = await _fetch_foursquare(place_type, query)
-                broad = [_parse_foursquare_result(r).model_dump() for r in raw_broad]
+                broad = [_parse_foursquare_result(r, place_type).model_dump() for r in raw_broad]
             else:
                 broad = await _fetch_openai_places(place_type, query)
         except Exception:

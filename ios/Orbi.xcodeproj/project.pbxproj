@@ -38,6 +38,9 @@
 		A10000030 /* ShareFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000030 /* ShareFormatter.swift */; };
 		A10000032 /* FlowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000032 /* FlowLayout.swift */; };
 		A10000033 /* ShareSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000033 /* ShareSheetView.swift */; };
+		A10000034 /* PriceFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000034 /* PriceFormatter.swift */; };
+		A10000035 /* ExternalLinkButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000035 /* ExternalLinkButton.swift */; };
+		A10000036 /* RestaurantSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000036 /* RestaurantSelector.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -74,6 +77,9 @@
 		B10000029 /* DestinationInsightsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DestinationInsightsView.swift; sourceTree = "<group>"; };
 		B10000032 /* FlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowLayout.swift; sourceTree = "<group>"; };
 		B10000033 /* ShareSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSheetView.swift; sourceTree = "<group>"; };
+		B10000034 /* PriceFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PriceFormatter.swift; sourceTree = "<group>"; };
+		B10000035 /* ExternalLinkButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExternalLinkButton.swift; sourceTree = "<group>"; };
+		B10000036 /* RestaurantSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestaurantSelector.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -128,6 +134,8 @@
 				B10000028 /* TimelineBarView.swift */,
 				B10000029 /* DestinationInsightsView.swift */,
 				B10000033 /* ShareSheetView.swift */,
+				B10000035 /* ExternalLinkButton.swift */,
+				B10000036 /* RestaurantSelector.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -162,6 +170,7 @@
 				B10000032 /* FlowLayout.swift */,
 				B10000020 /* KeychainHelper.swift */,
 				B10000021 /* NetworkMonitor.swift */,
+				B10000034 /* PriceFormatter.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -273,6 +282,9 @@
 				A10000030 /* ShareFormatter.swift in Sources */,
 				A10000032 /* FlowLayout.swift in Sources */,
 				A10000033 /* ShareSheetView.swift in Sources */,
+				A10000034 /* PriceFormatter.swift in Sources */,
+				A10000035 /* ExternalLinkButton.swift in Sources */,
+				A10000036 /* RestaurantSelector.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
