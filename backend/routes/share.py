@@ -3,14 +3,14 @@
 POST /trips/{trip_id}/share  → authenticated, generates share link
 GET  /share/{share_id}       → public, returns read-only trip data
 
-Requirements: 10.1, 10.2, 10.3, 10.4
+Requirements: 10.1, 10.2, 10.3, 10.4, 8.3, 8.5
 """
 
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request
 
-from backend.models.share import SharedTripResponse, ShareResponse
+from backend.models.share import ShareCreateRequest, SharedTripResponse, ShareResponse
 from backend.services.share import create_share_link, get_shared_trip
 
 # Router for the authenticated share-creation endpoint (lives under /trips)
@@ -21,11 +21,13 @@ share_read_router = APIRouter(prefix="/share", tags=["share"])
 
 
 @share_write_router.post("/{trip_id}/share", response_model=ShareResponse)
-async def create_share(trip_id: str, request: Request):
-    """Generate a share link for a trip (Req 10.1). Requires auth."""
+async def create_share(trip_id: str, request: Request, body: ShareCreateRequest | None = None):
+    """Generate a share link for a trip (Req 10.1, 8.3). Requires auth."""
     user_id: str = request.state.user_id
+    planned_by = body.planned_by if body else None
+    notes = body.notes if body else None
     try:
-        result = await create_share_link(trip_id, user_id)
+        result = await create_share_link(trip_id, user_id, planned_by=planned_by, notes=notes)
     except LookupError:
         raise HTTPException(status_code=404, detail="Trip not found")
     except PermissionError:

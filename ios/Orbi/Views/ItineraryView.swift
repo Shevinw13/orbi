@@ -316,7 +316,6 @@ struct ItineraryView: View {
 
     @StateObject private var viewModel: ItineraryViewModel
     @Environment(\.dismiss) private var dismiss
-    @State private var mapRouteDay: ItineraryDay?
     @State private var selectedDay: Int = 1
 
     init(itinerary: ItineraryResponse) {
@@ -369,9 +368,6 @@ struct ItineraryView: View {
                     viewModel.addActivity(to: viewModel.addActivityDayNumber, name: name, description: desc, durationMin: duration)
                 }
             }
-            .sheet(item: $mapRouteDay) { day in
-                MapRouteView(day: day)
-            }
             .alert("Error", isPresented: .constant(viewModel.errorMessage != nil)) {
                 Button("OK") { viewModel.errorMessage = nil }
             } message: {
@@ -396,7 +392,6 @@ struct ItineraryView: View {
                 Text(reasoning)
                     .font(.caption)
                     .foregroundStyle(DesignTokens.textPrimary)
-                    .lineLimit(3)
             }
 
             Text("Optimized for minimal travel time and best experience flow")
@@ -450,25 +445,6 @@ struct ItineraryView: View {
                 .font(.title3.weight(.bold))
                 .foregroundStyle(DesignTokens.textPrimary)
             Spacer()
-            // Optimize Day button (Req 7.1, 7.5)
-            Button {
-                viewModel.optimizeDay(day.dayNumber)
-            } label: {
-                Label("Optimize", systemImage: "arrow.triangle.swap")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(DesignTokens.accentCyan)
-            }
-            .disabled(day.slots.count < 3)
-            .opacity(day.slots.count < 3 ? 0.4 : 1.0)
-            .accessibilityLabel("Optimize Day \(day.dayNumber)")
-            Button {
-                mapRouteDay = day
-            } label: {
-                Label("Map", systemImage: "map")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(DesignTokens.accentCyan)
-            }
-            .accessibilityLabel("Show map route for Day \(day.dayNumber)")
             // Open in Apple Maps button (Req 8.1, 8.2)
             Button {
                 viewModel.openInAppleMaps(day: day)

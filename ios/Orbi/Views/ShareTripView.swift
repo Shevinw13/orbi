@@ -3,7 +3,7 @@ import SwiftUI
 // MARK: - Share Trip ViewModel
 
 /// Manages share link generation and clipboard copy.
-/// Validates: Requirements 10.1, 10.2
+/// Validates: Requirements 10.1, 10.2, 8.3
 @MainActor
 final class ShareTripViewModel: ObservableObject {
 
@@ -18,15 +18,19 @@ final class ShareTripViewModel: ObservableObject {
         self.tripId = tripId
     }
 
-    // MARK: - Generate Share Link (Req 10.1)
+    // MARK: - Generate Share Link (Req 10.1, 8.3)
 
-    func generateShareLink() async {
+    func generateShareLink(plannedBy: String? = nil, notes: String? = nil) async {
         isGenerating = true
         errorMessage = nil
 
         do {
+            let body = ShareCreateBody(
+                plannedBy: plannedBy?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? plannedBy : nil,
+                notes: notes?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? notes : nil
+            )
             let response: ShareLinkResponse = try await APIClient.shared.request(
-                .post, path: "/trips/\(tripId)/share"
+                .post, path: "/trips/\(tripId)/share", body: body
             )
             shareURL = response.shareUrl
         } catch let error as APIError {
@@ -178,6 +182,14 @@ struct SharedTripView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(trip.destination)
                         .font(.title.weight(.bold))
+
+                    // Planned by (Req 6.1, 6.2)
+                    if let plannedBy = trip.plannedBy, !plannedBy.isEmpty {
+                        Text("Planned by \(plannedBy)")
+                            .font(.subheadline)
+                            .foregroundStyle(DesignTokens.textSecondary)
+                    }
+
                     HStack(spacing: 12) {
                         Label("\(trip.numDays) days", systemImage: "calendar")
                         if let vibe = trip.vibe {
@@ -186,6 +198,18 @@ struct SharedTripView: View {
                     }
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                }
+
+                // Notes section (Req 7.1, 7.2, 7.3, 7.4)
+                if let notes = trip.notes, !notes.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Notes")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(DesignTokens.textPrimary)
+                        Text(notes)
+                            .font(.subheadline)
+                            .foregroundStyle(DesignTokens.textSecondary)
+                    }
                 }
 
                 // Read-only badge

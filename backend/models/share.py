@@ -1,6 +1,6 @@
 """Pydantic models for the Share_Service endpoints.
 
-Requirements: 10.1, 10.2, 10.3, 10.4
+Requirements: 10.1, 10.2, 10.3, 10.4, 8.1, 8.2, 8.4
 """
 
 from __future__ import annotations
@@ -17,6 +17,13 @@ class ShareResponse(BaseModel):
     share_url: str = Field(..., description="Full deep-link URL for the shared trip")
 
 
+class ShareCreateRequest(BaseModel):
+    """Request body for POST /trips/{id}/share with optional planner fields."""
+
+    planned_by: str | None = Field(None, max_length=100)
+    notes: str | None = Field(None, max_length=500)
+
+
 class SharedTripResponse(BaseModel):
     """Read-only trip data returned by GET /share/{share_id}.
 
@@ -31,3 +38,5 @@ class SharedTripResponse(BaseModel):
     selected_hotel_id: str | None = None
     selected_restaurants: list[dict[str, Any]] | None = None
     cost_breakdown: dict[str, Any] | None = None
+    planned_by: str | None = None
+    notes: str | None = None

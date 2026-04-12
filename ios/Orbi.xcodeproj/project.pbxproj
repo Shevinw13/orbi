@@ -37,6 +37,7 @@
 		A10000029 /* DestinationInsightsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000029 /* DestinationInsightsView.swift */; };
 		A10000030 /* ShareFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000030 /* ShareFormatter.swift */; };
 		A10000032 /* FlowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000032 /* FlowLayout.swift */; };
+		A10000033 /* ShareSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000033 /* ShareSheetView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -72,6 +73,7 @@
 		B10000028 /* TimelineBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineBarView.swift; sourceTree = "<group>"; };
 		B10000029 /* DestinationInsightsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DestinationInsightsView.swift; sourceTree = "<group>"; };
 		B10000032 /* FlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowLayout.swift; sourceTree = "<group>"; };
+		B10000033 /* ShareSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSheetView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -125,6 +127,7 @@
 				B10000026 /* AppIconView.swift */,
 				B10000028 /* TimelineBarView.swift */,
 				B10000029 /* DestinationInsightsView.swift */,
+				B10000033 /* ShareSheetView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -269,6 +272,7 @@
 				A10000029 /* DestinationInsightsView.swift in Sources */,
 				A10000030 /* ShareFormatter.swift in Sources */,
 				A10000032 /* FlowLayout.swift in Sources */,
+				A10000033 /* ShareSheetView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

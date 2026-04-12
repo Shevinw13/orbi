@@ -286,8 +286,15 @@ struct ShareLinkResponse: Codable {
     let shareUrl: String
 }
 
+/// Request body for `POST /trips/{id}/share` with optional planner fields.
+/// Validates: Requirement 8.3
+struct ShareCreateBody: Encodable {
+    let plannedBy: String?
+    let notes: String?
+}
+
 /// Read-only trip data from `GET /share/{share_id}`.
-/// Validates: Requirements 10.2, 10.3, 10.4
+/// Validates: Requirements 10.2, 10.3, 10.4, 8.1, 8.2
 struct SharedTripResponse: Codable {
     let destination: String
     let destinationLatLng: String?
@@ -297,6 +304,8 @@ struct SharedTripResponse: Codable {
     let selectedHotelId: String?
     let selectedRestaurants: [[String: AnyCodableValue]]?
     let costBreakdown: [String: AnyCodableValue]?
+    let plannedBy: String?
+    let notes: String?
 }
 
 // MARK: - Cost Request

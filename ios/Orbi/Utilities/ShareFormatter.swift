@@ -8,16 +8,36 @@ struct ShareFormatter {
 
     /// Formats an itinerary response into plain text suitable for iMessage, Email, and Notes.
     /// Includes activity costs, restaurant cuisine details, and a total estimated cost.
-    /// - Parameter itinerary: The itinerary to format.
+    /// - Parameters:
+    ///   - itinerary: The itinerary to format.
+    ///   - plannedBy: Optional planner name to include below the title.
+    ///   - notes: Optional notes to include after the title block.
     /// - Returns: A plain text string with title, day-by-day breakdown, restaurant details, and total cost.
-    static func formatTrip(_ itinerary: ItineraryResponse) -> String {
+    static func formatTrip(
+        _ itinerary: ItineraryResponse,
+        plannedBy: String? = nil,
+        notes: String? = nil
+    ) -> String {
         var lines: [String] = []
         var totalCost: Double = 0
         var hasCostData = false
 
         // Title line (Req 13.1)
         lines.append("\(itinerary.numDays)-Day \(itinerary.destination) \(itinerary.vibe) Trip")
+
+        // Planned by line (Req 5.2, 5.3)
+        if let plannedBy = plannedBy?.trimmingCharacters(in: .whitespacesAndNewlines), !plannedBy.isEmpty {
+            lines.append("Planned by \(plannedBy)")
+        }
+
         lines.append("")
+
+        // Notes section (Req 5.4, 5.5)
+        if let notes = notes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
+            lines.append("Notes:")
+            lines.append(notes)
+            lines.append("")
+        }
 
         // Day-by-day breakdown (Req 13.2, 13.5)
         for day in itinerary.days {

@@ -40,6 +40,7 @@ struct TripResultView: View {
     @State private var isSaving: Bool = false
     @State private var saveError: String?
     @State private var showShareSheet: Bool = false
+    @State private var plannedByText: String = ""
 
     @StateObject private var itineraryVM: ItineraryViewModel
     @StateObject private var recommendationsVM: RecommendationsViewModel
@@ -118,8 +119,9 @@ struct TripResultView: View {
                 Text(saveError ?? "")
             }
             .sheet(isPresented: $showShareSheet) {
-                ActivityViewControllerWrapper(
-                    activityItems: [ShareFormatter.formatTrip(itineraryVM.itinerary)]
+                ShareSheetView(
+                    itinerary: itineraryVM.itinerary,
+                    plannedBy: $plannedByText
                 )
             }
             .onAppear {
@@ -248,7 +250,6 @@ struct TripResultView: View {
                 Text(reasoning)
                     .font(.caption)
                     .foregroundStyle(DesignTokens.textPrimary)
-                    .lineLimit(3)
             }
 
             Text("Optimized for minimal travel time and best experience flow")
@@ -412,8 +413,6 @@ struct InlineDaySectionView: View {
 
     let day: ItineraryDay
     @ObservedObject var viewModel: ItineraryViewModel
-    @State private var mapRouteDay: ItineraryDay?
-
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Day header with map button
@@ -448,9 +447,6 @@ struct InlineDaySectionView: View {
             }
             .accessibilityLabel("Add activity to Day \(day.dayNumber)")
         }
-        .sheet(item: $mapRouteDay) { day in
-            MapRouteView(day: day)
-        }
     }
 
     private var daySectionHeader: some View {
@@ -461,25 +457,6 @@ struct InlineDaySectionView: View {
                 .font(.title3.weight(.bold))
                 .foregroundStyle(DesignTokens.textPrimary)
             Spacer()
-            // Optimize Day button (Req 7.1, 7.5)
-            Button {
-                viewModel.optimizeDay(day.dayNumber)
-            } label: {
-                Label("Optimize", systemImage: "arrow.triangle.swap")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(DesignTokens.accentCyan)
-            }
-            .disabled(day.slots.count < 3)
-            .opacity(day.slots.count < 3 ? 0.4 : 1.0)
-            .accessibilityLabel("Optimize Day \(day.dayNumber)")
-            Button {
-                mapRouteDay = day
-            } label: {
-                Label("Map", systemImage: "map")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(DesignTokens.accentCyan)
-            }
-            .accessibilityLabel("Show map route for Day \(day.dayNumber)")
             // Open in Apple Maps button (Req 8.1, 8.2)
             Button {
                 viewModel.openInAppleMaps(day: day)

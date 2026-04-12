@@ -14,6 +14,8 @@ final class SavedTripsViewModel: ObservableObject {
     @Published var showDeleteConfirmation: Bool = false
     @Published var loadedTrip: TripResponse?
     @Published var isLoadingTrip: Bool = false
+    @Published var tripLoadError: String?
+    @Published var tripLoadRetryId: String?
 
     // MARK: - List Trips (Req 9.2)
 
@@ -40,6 +42,8 @@ final class SavedTripsViewModel: ObservableObject {
     func loadTrip(id: String) async {
         isLoadingTrip = true
         errorMessage = nil
+        tripLoadError = nil
+        tripLoadRetryId = id
 
         do {
             let trip: TripResponse = try await APIClient.shared.request(
@@ -47,9 +51,9 @@ final class SavedTripsViewModel: ObservableObject {
             )
             loadedTrip = trip
         } catch let error as APIError {
-            errorMessage = error.errorDescription
+            tripLoadError = error.errorDescription
         } catch {
-            errorMessage = "Failed to load trip."
+            tripLoadError = "Failed to load trip."
         }
 
         isLoadingTrip = false
@@ -175,6 +179,21 @@ struct SavedTripsView: View {
             .sheet(item: $viewModel.loadedTrip) { trip in
                 SavedTripDetailView(trip: trip)
             }
+            .alert("Load Error", isPresented: .init(
+                get: { viewModel.tripLoadError != nil },
+                set: { if !$0 { viewModel.tripLoadError = nil } }
+            )) {
+                Button("Retry") {
+                    if let retryId = viewModel.tripLoadRetryId {
+                        Task { await viewModel.loadTrip(id: retryId) }
+                    }
+                }
+                Button("OK", role: .cancel) {
+                    viewModel.tripLoadError = nil
+                }
+            } message: {
+                Text(viewModel.tripLoadError ?? "")
+            }
         }
     }
 
@@ -291,54 +310,55 @@ struct SavedTripsView: View {
 
 // MARK: - Saved Trip Detail View
 
-/// Displays a full saved trip with itinerary, map, and places.
-/// Validates: Requirement 9.3
+/// Displays a full saved trip with itinerary, cost breakdown, and metadata.
+/// Decodes the raw JSON dictionaries from TripResponse into typed models.
+/// Validates: Requirements 9.3, 10.1, 10.2, 10.3, 10.4, 10.5, 10.6
 struct SavedTripDetailView: View {
 
     let trip: TripResponse
     @Environment(\.dismiss) private var dismiss
 
+    /// Decoded itinerary from the trip's JSON dictionary.
+    private var decodedItinerary: ItineraryResponse? {
+        guard let dict = trip.itinerary else { return nil }
+        return Self.decode(ItineraryResponse.self, from: dict)
+    }
+
+    /// Decoded cost breakdown from the trip's JSON dictionary.
+    private var decodedCostBreakdown: CostBreakdown? {
+        guard let dict = trip.costBreakdown else { return nil }
+        return Self.decode(CostBreakdown.self, from: dict)
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(trip.destination)
-                            .font(.title.weight(.bold))
-                            .foregroundStyle(DesignTokens.textPrimary)
-                        HStack(spacing: 12) {
-                            Label("\(trip.numDays) days", systemImage: "calendar")
-                            if let vibe = trip.vibe {
-                                Label(vibe, systemImage: vibeIcon(vibe))
-                            }
-                        }
-                        .font(.subheadline)
-                        .foregroundStyle(DesignTokens.textSecondary)
-                    }
+                VStack(alignment: .leading, spacing: 0) {
+                    // Header — destination, duration, vibe (Req 10.6)
+                    tripHeader
 
                     Divider().overlay(DesignTokens.surfaceGlassBorder)
+                        .padding(.horizontal, DesignTokens.spacingMD)
 
-                    if trip.itinerary != nil {
-                        Text("Itinerary saved with this trip.")
-                            .font(.subheadline)
-                            .foregroundStyle(DesignTokens.textSecondary)
+                    // Itinerary section (Req 10.2, 10.4)
+                    if let itinerary = decodedItinerary {
+                        itinerarySection(itinerary)
                     } else {
-                        Text("No itinerary data available.")
-                            .font(.subheadline)
-                            .foregroundStyle(DesignTokens.textTertiary)
+                        noItineraryFallback
                     }
 
-                    if trip.costBreakdown != nil {
-                        Text("Cost breakdown saved with this trip.")
-                            .font(.subheadline)
-                            .foregroundStyle(DesignTokens.textSecondary)
+                    // Cost breakdown section (Req 10.3)
+                    if let costBreakdown = decodedCostBreakdown {
+                        costBreakdownSection(costBreakdown)
                     }
                 }
-                .padding(DesignTokens.spacingMD)
+                .padding(.bottom, 24)
             }
             .background(DesignTokens.backgroundPrimary.ignoresSafeArea())
             .navigationTitle("Trip Details")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(DesignTokens.backgroundPrimary, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
@@ -348,6 +368,283 @@ struct SavedTripDetailView: View {
         }
     }
 
+    // MARK: - Header (Req 10.6)
+
+    private var tripHeader: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(trip.destination)
+                .font(.title.weight(.bold))
+                .foregroundStyle(DesignTokens.textPrimary)
+            HStack(spacing: 12) {
+                Label("\(trip.numDays) days", systemImage: "calendar")
+                if let vibe = trip.vibe {
+                    Label(vibe, systemImage: vibeIcon(vibe))
+                }
+            }
+            .font(.subheadline)
+            .foregroundStyle(DesignTokens.textSecondary)
+        }
+        .padding(DesignTokens.spacingMD)
+    }
+
+    // MARK: - Itinerary Section (Req 10.2)
+
+    @ViewBuilder
+    private func itinerarySection(_ itinerary: ItineraryResponse) -> some View {
+        // Why This Plan card
+        if let reasoning = itinerary.reasoningText, !reasoning.isEmpty {
+            whyThisPlanCard(reasoning: reasoning)
+        }
+
+        ForEach(itinerary.days) { day in
+            savedDaySection(day: day)
+        }
+    }
+
+    private func whyThisPlanCard(reasoning: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Why This Plan", systemImage: "lightbulb.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(DesignTokens.accentCyan)
+
+            Text(reasoning)
+                .font(.caption)
+                .foregroundStyle(DesignTokens.textPrimary)
+
+            Text("Optimized for minimal travel time and best experience flow")
+                .font(.caption2)
+                .foregroundStyle(DesignTokens.textSecondary)
+        }
+        .padding(DesignTokens.spacingMD)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassmorphic(cornerRadius: DesignTokens.radiusMD)
+        .padding(.horizontal, DesignTokens.spacingMD)
+        .padding(.vertical, DesignTokens.spacingSM)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Why This Plan")
+    }
+
+    // MARK: - Day Section
+
+    private func savedDaySection(day: ItineraryDay) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Day header
+            HStack {
+                Image(systemName: "calendar")
+                    .foregroundStyle(DesignTokens.accentCyan)
+                Text("Day \(day.dayNumber)")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(DesignTokens.textPrimary)
+                Spacer()
+                Text("\(day.slots.count) activities")
+                    .font(.caption)
+                    .foregroundStyle(DesignTokens.textSecondary)
+            }
+            .padding(.horizontal, DesignTokens.spacingMD)
+            .padding(.vertical, DesignTokens.spacingSM)
+            .background(DesignTokens.backgroundSecondary)
+
+            // Timeline bar
+            TimelineBarView(day: day) { _ in }
+
+            // Activity slots with timeline indicators
+            ForEach(Array(day.slots.enumerated()), id: \.element.id) { index, slot in
+                savedSlotCard(slot: slot, isLast: index == day.slots.count - 1)
+            }
+
+            // Restaurant row
+            if let restaurant = day.restaurant {
+                savedRestaurantRow(restaurant: restaurant)
+            }
+        }
+    }
+
+    // MARK: - Slot Card (read-only)
+
+    private func savedSlotCard(slot: ItinerarySlot, isLast: Bool) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            // Timeline indicator
+            VStack(spacing: 0) {
+                Circle()
+                    .fill(timeSlotColor(slot.timeSlot))
+                    .frame(width: 12, height: 12)
+                if !isLast {
+                    Rectangle()
+                        .fill(DesignTokens.surfaceGlassBorder)
+                        .frame(width: 2)
+                        .frame(maxHeight: .infinity)
+                }
+            }
+            .frame(width: 12)
+
+            // Activity card content
+            VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
+                Text(slot.timeSlot)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(timeSlotColor(slot.timeSlot))
+                Text(slot.activityName)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(DesignTokens.textPrimary)
+                if let tag = slot.tag, !tag.isEmpty {
+                    Text(tag)
+                        .font(.caption2)
+                        .foregroundStyle(DesignTokens.accentCyan)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(
+                            Capsule()
+                                .fill(DesignTokens.accentCyan.opacity(0.2))
+                        )
+                }
+                Text(slot.description)
+                    .font(.caption)
+                    .foregroundStyle(DesignTokens.textSecondary)
+                    .lineLimit(2)
+
+                HStack(spacing: 12) {
+                    Label("\(slot.estimatedDurationMin) min", systemImage: "clock")
+                    if let cost = slot.estimatedCostUsd, cost > 0 {
+                        Label("$\(Int(cost))", systemImage: "dollarsign.circle")
+                    }
+                    if let travel = slot.travelTimeToNextMin, travel > 0 {
+                        Label("\(travel) min travel", systemImage: "car")
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(DesignTokens.textSecondary)
+            }
+            .padding(DesignTokens.spacingSM)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .glassmorphic(cornerRadius: DesignTokens.radiusMD)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, DesignTokens.spacingMD)
+        .padding(.vertical, DesignTokens.spacingXS)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(slot.timeSlot): \(slot.activityName), \(slot.estimatedDurationMin) minutes")
+    }
+
+    // MARK: - Restaurant Row (read-only)
+
+    private func savedRestaurantRow(restaurant: ItineraryRestaurant) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "fork.knife.circle.fill")
+                .foregroundStyle(DesignTokens.accentCyan)
+                .font(.title3)
+                .frame(width: 12)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Restaurant")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(DesignTokens.accentCyan)
+                Text(restaurant.name)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(DesignTokens.textPrimary)
+                HStack(spacing: 8) {
+                    Text(restaurant.cuisine)
+                    Text(restaurant.priceLevel)
+                    Label(String(format: "%.1f", restaurant.rating), systemImage: "star.fill")
+                        .foregroundStyle(.yellow)
+                }
+                .font(.caption2)
+                .foregroundStyle(DesignTokens.textSecondary)
+            }
+            .padding(.vertical, 8)
+
+            Spacer()
+        }
+        .padding(.horizontal, DesignTokens.spacingMD)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Restaurant: \(restaurant.name), \(restaurant.cuisine), rating \(String(format: "%.1f", restaurant.rating))")
+    }
+
+    // MARK: - No Itinerary Fallback (Req 10.4)
+
+    private var noItineraryFallback: some View {
+        Text("No itinerary data available.")
+            .font(.subheadline)
+            .foregroundStyle(DesignTokens.textTertiary)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.vertical, DesignTokens.spacingLG)
+            .padding(.horizontal, DesignTokens.spacingMD)
+    }
+
+    // MARK: - Cost Breakdown Section (Req 10.3)
+
+    private func costBreakdownSection(_ cost: CostBreakdown) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Divider().overlay(DesignTokens.surfaceGlassBorder)
+                .padding(.horizontal, DesignTokens.spacingMD)
+
+            Text("Cost Breakdown")
+                .font(.title3.weight(.bold))
+                .foregroundStyle(DesignTokens.textPrimary)
+                .padding(.horizontal, DesignTokens.spacingMD)
+
+            // Total
+            VStack(spacing: 4) {
+                Text("Estimated total cost")
+                    .font(.caption)
+                    .foregroundStyle(DesignTokens.textSecondary)
+                Text("$\(Int(cost.total))")
+                    .font(.system(size: 36, weight: .bold, design: .rounded))
+                    .foregroundStyle(.orange)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Estimated total trip cost: $\(Int(cost.total))")
+
+            // Category breakdown
+            HStack(spacing: 0) {
+                costCategoryPill(icon: "building.2", label: "Hotel", amount: cost.hotelTotal)
+                Divider().frame(height: 40)
+                costCategoryPill(icon: "fork.knife", label: "Food", amount: cost.foodTotal)
+                Divider().frame(height: 40)
+                costCategoryPill(icon: "figure.walk", label: "Activities", amount: cost.activitiesTotal)
+            }
+            .padding(12)
+            .glassmorphic(cornerRadius: DesignTokens.radiusMD)
+            .padding(.horizontal, DesignTokens.spacingMD)
+
+            // Per-day breakdown
+            ForEach(cost.perDay) { day in
+                HStack {
+                    Text("Day \(day.day)")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(DesignTokens.textPrimary)
+                    Spacer()
+                    Text("$\(Int(day.subtotal))")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(DesignTokens.textPrimary)
+                }
+                .padding(.vertical, 6)
+                .padding(.horizontal, DesignTokens.spacingMD)
+            }
+        }
+        .padding(.top, DesignTokens.spacingSM)
+    }
+
+    private func costCategoryPill(icon: String, label: String, amount: Double) -> some View {
+        VStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.caption)
+                .foregroundStyle(.orange)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(DesignTokens.textSecondary)
+            Text("$\(Int(amount))")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(DesignTokens.textPrimary)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(label): $\(Int(amount))")
+    }
+
+    // MARK: - Helpers
+
     private func vibeIcon(_ vibe: String) -> String {
         switch vibe.lowercased() {
         case "foodie": return "fork.knife"
@@ -356,6 +653,24 @@ struct SavedTripDetailView: View {
         case "nightlife": return "moon.stars.fill"
         default: return "sparkles"
         }
+    }
+
+    private func timeSlotColor(_ timeSlot: String) -> Color {
+        switch timeSlot.lowercased() {
+        case "morning": return DesignTokens.accentCyan
+        case "afternoon": return DesignTokens.accentBlue
+        case "evening": return .purple
+        default: return .gray
+        }
+    }
+
+    // MARK: - JSON Decoding Helper
+
+    /// Decodes a `[String: AnyCodableValue]` dictionary into a typed Decodable model
+    /// by re-encoding through JSONEncoder/JSONDecoder.
+    static func decode<T: Decodable>(_ type: T.Type, from dict: [String: AnyCodableValue]) -> T? {
+        guard let data = try? JSONEncoder().encode(dict) else { return nil }
+        return try? JSONDecoder().decode(T.self, from: data)
     }
 }
 
