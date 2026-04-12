@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 
 
 class ReplaceActivityRequest(BaseModel):
-    """POST /trips/replace-item request body (Req 5.5)."""
+    """POST /trips/replace-item request body (Req 5.5, 11.1–11.4)."""
 
     destination: str = Field(..., description="City or destination name")
     day_number: int = Field(..., ge=1, description="Day number in the itinerary")
@@ -21,6 +21,10 @@ class ReplaceActivityRequest(BaseModel):
         description="List of activity names already in the itinerary to avoid duplicates",
     )
     vibe: str = Field(..., description="Trip vibe: Foodie, Adventure, Relaxed, Nightlife")
+    adjacent_activity_coords: list[dict] | None = Field(
+        None,
+        description="Lat/lng coordinates of adjacent activities in the same day for proximity constraint",
+    )
 
 
 class ItineraryRequest(BaseModel):
@@ -35,6 +39,7 @@ class ItineraryRequest(BaseModel):
     restaurant_price_range: str | None = Field(None, description="Restaurant price range ($–$$$)")
     cuisine_type: str | None = Field(None, description="Preferred cuisine type")
     vibe: str = Field(..., description="Trip vibe: Foodie, Adventure, Relaxed, Nightlife")
+    family_friendly: bool = Field(False, description="Enable family-friendly mode")
 
 
 class RestaurantRecommendation(BaseModel):
@@ -62,6 +67,7 @@ class ActivitySlot(BaseModel):
         None, description="Travel time in minutes to the next activity"
     )
     estimated_cost_usd: float = 0.0
+    tag: str | None = None
 
 
 class ItineraryDay(BaseModel):
@@ -79,3 +85,4 @@ class ItineraryResponse(BaseModel):
     num_days: int
     vibe: str
     days: list[ItineraryDay]
+    reasoning_text: str | None = None

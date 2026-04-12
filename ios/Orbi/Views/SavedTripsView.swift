@@ -89,6 +89,7 @@ struct SavedTripsView: View {
 
     @StateObject private var viewModel = SavedTripsViewModel()
     @Environment(\.dismiss) private var dismiss
+    var onPlanTrip: (() -> Void)?
 
     private let columns = [
         GridItem(.flexible(), spacing: DesignTokens.spacingMD),
@@ -117,14 +118,26 @@ struct SavedTripsView: View {
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else if viewModel.trips.isEmpty {
-                        VStack(spacing: 12) {
+                        VStack(spacing: 16) {
                             Image(systemName: "suitcase")
                                 .font(.system(size: 48))
                                 .foregroundStyle(DesignTokens.textSecondary)
-                            Text("No saved trips yet")
+                            Text("No trips yet")
                                 .font(.headline)
-                                .foregroundStyle(DesignTokens.textSecondary)
-                            Text("Plan a trip from the globe and save it here.")
+                                .foregroundStyle(DesignTokens.textPrimary)
+                            Button {
+                                dismiss()
+                                onPlanTrip?()
+                            } label: {
+                                Text("Plan your first trip")
+                                    .font(.headline)
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 24)
+                                    .padding(.vertical, 12)
+                                    .background(DesignTokens.accentGradient)
+                                    .clipShape(Capsule())
+                            }
+                            Text("Try a weekend in Atlanta")
                                 .font(.subheadline)
                                 .foregroundStyle(DesignTokens.textTertiary)
                         }

@@ -13,9 +13,9 @@ struct ContentView: View {
             case .explore:
                 ExploreTab()
             case .trips:
-                SavedTripsTab()
+                SavedTripsTab(selectedTab: $selectedTab)
             case .profile:
-                ProfileTab(authService: authService)
+                ProfileTab(authService: authService, selectedTab: $selectedTab)
             }
 
             // Floating tab bar at bottom
@@ -78,17 +78,30 @@ struct ExploreTab: View {
     @State private var selectedCity: CityMarker?
     @State private var flowState: ExploreFlowState = .browsing
     @StateObject private var prefsVM = PrefsViewModelHolder()
+    @FocusState private var isSearchFocused: Bool
+    @State private var searchQuery: String = ""
 
     var body: some View {
         ZStack {
             GlobeView(selectedCity: $selectedCity, userLocation: locationManager.currentLocation)
                 .ignoresSafeArea()
+                .padding(.top, UIScreen.main.bounds.height * 0.12) // Task 17.3: reduce globe height ~12%
 
             VStack(spacing: 0) {
                 if !networkMonitor.isConnected { OfflineBannerView() }
                 if flowState == .browsing || flowState == .citySelected {
-                    SearchBarView(selectedCity: $selectedCity)
-                        .padding(.top, 8)
+                    VStack(spacing: 6) {
+                        // Task 17.3: Guidance text above search bar
+                        Text("Where do you want to go?")
+                            .font(.subheadline)
+                            .foregroundStyle(DesignTokens.textSecondary)
+                            .lineLimit(1)
+                            .opacity(isSearchFocused ? 0 : 1)
+                            .animation(.easeInOut(duration: 0.2), value: isSearchFocused)
+
+                        SearchBarView(selectedCity: $selectedCity)
+                    }
+                    .padding(.top, 8)
                 }
                 Spacer()
 
@@ -441,12 +454,25 @@ struct PreferencesOverlay: View {
                     Text("Vibe")
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(DesignTokens.textSecondary)
-                    HStack(spacing: DesignTokens.spacingSM) {
+                    FlowLayout(spacing: DesignTokens.spacingSM) {
                         ForEach(TripVibe.allCases) { vibe in
                             vibePill(vibe)
                         }
                     }
                 }
+
+                // Family Friendly toggle
+                Toggle(isOn: $viewModel.familyFriendly) {
+                    HStack(spacing: DesignTokens.spacingSM) {
+                        Image(systemName: "figure.and.child.holdinghands")
+                            .foregroundStyle(DesignTokens.accentCyan)
+                        Text("Family Friendly")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(DesignTokens.textPrimary)
+                    }
+                }
+                .tint(DesignTokens.accentCyan)
+                .padding(.horizontal, DesignTokens.spacingMD)
 
                 // Generate Itinerary button — full-width accent gradient
                 Button {
@@ -526,6 +552,13 @@ struct PreferencesOverlay: View {
 struct GeneratingOverlay: View {
     let cityName: String
     @State private var glowOpacity: Double = 0.3
+    @State private var messageIndex: Int = 0
+
+    private let stagedMessages = [
+        "Finding top spots…",
+        "Optimizing your route…",
+        "Finalizing your itinerary…"
+    ]
 
     var body: some View {
         ZStack {
@@ -559,16 +592,20 @@ struct GeneratingOverlay: View {
                 Text(cityName)
                     .font(.title3.weight(.bold))
                     .foregroundStyle(DesignTokens.textPrimary)
+                    .padding(.horizontal, 16)
 
-                // Generating text
-                Text("Generating your itinerary…")
+                // Staged generating text
+                Text(stagedMessages[messageIndex])
                     .font(.title.weight(.bold))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(DesignTokens.textPrimary)
+                    .padding(.horizontal, 16)
+                    .animation(.easeInOut(duration: 0.3), value: messageIndex)
 
                 Text("Our travel professionals are planning your perfect trip")
                     .font(.subheadline)
                     .foregroundStyle(DesignTokens.textSecondary)
+                    .padding(.horizontal, 16)
 
                 // Cyan-tinted ProgressView
                 ProgressView()
@@ -584,6 +621,13 @@ struct GeneratingOverlay: View {
                 glowOpacity = 0.8
             }
         }
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                guard !Task.isCancelled else { break }
+                messageIndex = (messageIndex + 1) % stagedMessages.count
+            }
+        }
     }
 }
 
@@ -591,6 +635,7 @@ struct GeneratingOverlay: View {
 
 struct SavedTripsTab: View {
     @State private var showTrips = false
+    @Binding var selectedTab: AppTab
 
     var body: some View {
         ZStack {
@@ -598,13 +643,17 @@ struct SavedTripsTab: View {
         }
         .onAppear { showTrips = true }
         .sheet(isPresented: $showTrips) {
-            SavedTripsView()
+            SavedTripsView(onPlanTrip: {
+                selectedTab = .explore
+            })
         }
     }
 }
 
 struct ProfileTab: View {
     @ObservedObject var authService: AuthService
+    @Binding var selectedTab: AppTab
+
     var body: some View {
         NavigationStack {
             List {
@@ -613,39 +662,26 @@ struct ProfileTab: View {
                         Image(systemName: "person.circle.fill")
                             .font(.system(size: 48))
                             .foregroundStyle(DesignTokens.accentCyan)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(authService.displayName ?? authService.userId ?? "Traveler")
-                                .font(.headline)
-                                .foregroundStyle(DesignTokens.textPrimary)
-                            Text("Orbi Explorer")
-                                .font(.caption)
-                                .foregroundStyle(DesignTokens.textSecondary)
-                        }
+                        Text(authService.displayName ?? authService.userId ?? "User")
+                            .font(.headline)
+                            .foregroundStyle(DesignTokens.textPrimary)
                     }
                     .padding(.vertical, 8)
                 }
-                Section("Account") {
+                Section {
                     NavigationLink {
-                        Text("Settings")
-                            .navigationTitle("Settings")
-                    } label: {
-                        Label("Settings", systemImage: "gearshape")
-                    }
-                    NavigationLink {
-                        SavedTripsView()
+                        SavedTripsView(onPlanTrip: {
+                            selectedTab = .explore
+                        })
                     } label: {
                         Label("Saved Trips", systemImage: "suitcase")
                     }
-                }
-                Section("Preferences") {
-                    NavigationLink {
-                        Text("Preferences")
-                            .navigationTitle("Preferences")
+                    Button {
+                        selectedTab = .trips
                     } label: {
-                        Label("Preferences", systemImage: "slider.horizontal.3")
+                        Label("My Trips", systemImage: "map")
+                            .foregroundStyle(DesignTokens.textPrimary)
                     }
-                    Label("Notifications", systemImage: "bell")
-                    Label("Appearance", systemImage: "paintbrush")
                 }
                 Section {
                     Button(role: .destructive) { authService.signOut() } label: {

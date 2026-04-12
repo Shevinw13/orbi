@@ -118,7 +118,14 @@ struct SearchBarView: View {
             }
             .padding(.horizontal, 14)
             .frame(height: DesignTokens.searchBarHeight)
-            .glassmorphic(cornerRadius: DesignTokens.radiusMD)
+            .background(.ultraThinMaterial)
+            .background(Color.white.opacity(0.15))
+            .clipShape(RoundedRectangle(cornerRadius: DesignTokens.radiusMD))
+            .overlay(
+                RoundedRectangle(cornerRadius: DesignTokens.radiusMD)
+                    .stroke(DesignTokens.surfaceGlassBorder, lineWidth: 0.5)
+            )
+            .shadow(color: .black.opacity(0.25), radius: 8, y: 2)
 
             // Suggestions dropdown
             if viewModel.showSuggestions {

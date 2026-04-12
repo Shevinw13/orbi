@@ -62,10 +62,17 @@ def _build_prompt(request: ItineraryRequest) -> str:
         else ""
     )
 
+    family_friendly_note = (
+        "Family-friendly mode: prioritize parks, museums, zoos, cultural centers. "
+        "Reduce nightlife and adult venues.\n"
+        if request.family_friendly
+        else ""
+    )
+
     return (
         f"Generate a {request.num_days}-day travel itinerary for {request.destination}.\n"
         f"Trip vibe: {request.vibe}.\n"
-        f"{cuisine_note}{restaurant_price_note}\n"
+        f"{cuisine_note}{restaurant_price_note}{family_friendly_note}\n"
         "Requirements:\n"
         "- Each day must have Morning, Afternoon, and Evening activity slots.\n"
         "- Include a mix of top attractions and local hidden-gem experiences.\n"
@@ -73,12 +80,16 @@ def _build_prompt(request: ItineraryRequest) -> str:
         "activities should require no more than 60 minutes of travel time.\n"
         "- Include estimated travel time in minutes between consecutive activities.\n"
         "- Include one restaurant recommendation per day matching the vibe.\n"
-        "- Tailor activity selection, restaurant choices, and pacing to the vibe.\n\n"
+        "- Tailor activity selection, restaurant choices, and pacing to the vibe.\n"
+        "- For each activity, include a \"tag\" field with one of: \"Popular\", \"Highly rated\", "
+        "\"Hidden gem\", \"Family-friendly\", or null if none apply.\n\n"
         "Return ONLY valid JSON matching this exact schema (no markdown, no extra text):\n"
         "{\n"
         '  "destination": "<city>",\n'
         f'  "num_days": {request.num_days},\n'
         f'  "vibe": "{request.vibe}",\n'
+        '  "reasoning": "1-2 sentence explanation of why this itinerary was planned this way, '
+        'based on the vibe and optimization criteria",\n'
         '  "days": [\n'
         "    {\n"
         '      "day_number": 1,\n'
@@ -91,7 +102,8 @@ def _build_prompt(request: ItineraryRequest) -> str:
         '          "longitude": 0.0,\n'
         '          "estimated_duration_min": 120,\n'
         '          "travel_time_to_next_min": 15,\n'
-        '          "estimated_cost_usd": 20\n'
+        '          "estimated_cost_usd": 20,\n'
+        '          "tag": "Popular | Highly rated | Hidden gem | Family-friendly (pick one or null)"\n'
         "        }\n"
         "      ],\n"
         '      "restaurant": {\n'
@@ -153,6 +165,7 @@ def _parse_itinerary_response(raw_json: dict) -> ItineraryResponse:
         num_days=raw_json["num_days"],
         vibe=raw_json["vibe"],
         days=days,
+        reasoning_text=raw_json.get("reasoning"),
     )
 
 
@@ -235,7 +248,7 @@ async def generate_itinerary(request: ItineraryRequest) -> ItineraryResponse:
 
 
 def _build_replace_prompt(request: ReplaceActivityRequest) -> str:
-    """Construct the OpenAI prompt for replacing a single activity (Req 5.5)."""
+    """Construct the OpenAI prompt for replacing a single activity (Req 5.5, 11.1–11.4)."""
     avoid_list = "\n".join(f"- {name}" for name in request.existing_activities)
     avoid_section = (
         f"\nDo NOT suggest any of these activities (already in the itinerary):\n{avoid_list}\n"
@@ -243,11 +256,23 @@ def _build_replace_prompt(request: ReplaceActivityRequest) -> str:
         else ""
     )
 
+    # Adjacent activity proximity constraint (Req 11.3, 11.4)
+    adjacent_section = ""
+    if request.adjacent_activity_coords:
+        coord_strs = [
+            f"({c.get('lat', 0)}, {c.get('lng', 0)})"
+            for c in request.adjacent_activity_coords
+        ]
+        adjacent_section = (
+            f"\nThe replacement activity must be within 60 minutes of travel time "
+            f"from these adjacent activity coordinates: {', '.join(coord_strs)}.\n"
+        )
+
     return (
         f"Suggest ONE alternative {request.time_slot.lower()} activity in {request.destination}.\n"
         f"Trip vibe: {request.vibe}.\n"
         f"This replaces: {request.current_activity_name}.\n"
-        f"{avoid_section}\n"
+        f"{avoid_section}{adjacent_section}\n"
         "Requirements:\n"
         "- The activity must match the vibe.\n"
         "- Include realistic latitude and longitude for the location.\n"
@@ -261,7 +286,8 @@ def _build_replace_prompt(request: ReplaceActivityRequest) -> str:
         '  "longitude": 0.0,\n'
         '  "estimated_duration_min": 120,\n'
         '  "travel_time_to_next_min": null,\n'
-        '  "estimated_cost_usd": 20\n'
+        '  "estimated_cost_usd": 20,\n'
+        '  "tag": "Popular | Highly rated | Hidden gem | Family-friendly (pick one or null)"\n'
         "}"
     )
 

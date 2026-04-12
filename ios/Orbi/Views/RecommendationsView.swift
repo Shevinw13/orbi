@@ -214,6 +214,7 @@ struct RecommendationsView: View {
                 ForEach(viewModel.hotels) { hotel in
                     PlaceCard(
                         place: hotel,
+                        placeType: .hotel,
                         isSelected: viewModel.selectedHotel?.placeId == hotel.placeId,
                         onTap: { viewModel.selectHotel(hotel) }
                     )
@@ -253,6 +254,7 @@ struct RecommendationsView: View {
                 ForEach(viewModel.restaurants) { restaurant in
                     PlaceCard(
                         place: restaurant,
+                        placeType: .restaurant,
                         isSelected: viewModel.selectedRestaurants.contains(restaurant.placeId),
                         onTap: { viewModel.toggleRestaurant(restaurant) }
                     )
@@ -327,12 +329,21 @@ struct RecommendationsView: View {
 }
 
 
+// MARK: - Place Type
+
+/// Distinguishes hotel vs restaurant for pricing format selection.
+enum PlaceType {
+    case hotel
+    case restaurant
+}
+
 // MARK: - Place Card (Req 7.3)
 
 /// Displays a single place recommendation with name, rating, price level, and image.
 struct PlaceCard: View {
 
     let place: PlaceRecommendation
+    let placeType: PlaceType
     let isSelected: Bool
     let onTap: (() -> Void)?
 
@@ -352,10 +363,8 @@ struct PlaceCard: View {
                     HStack(spacing: 8) {
                         Label(String(format: "%.1f", place.rating), systemImage: "star.fill")
                             .foregroundStyle(.yellow)
-                        if !place.priceLevel.isEmpty {
-                            Text(place.priceLevel)
-                                .foregroundStyle(DesignTokens.textSecondary)
-                        }
+                        Text(placeType == .hotel ? place.formattedHotelPrice : place.formattedRestaurantPrice)
+                            .foregroundStyle(DesignTokens.accentCyan)
                     }
                     .font(.caption)
 
@@ -369,13 +378,6 @@ struct PlaceCard: View {
                         Text("Based on \(count) reviews")
                             .font(.caption2)
                             .foregroundStyle(DesignTokens.textTertiary)
-                    }
-
-                    // Price range indicators (Req 16.1, 16.2, 16.4)
-                    if let minPrice = place.priceRangeMin, let maxPrice = place.priceRangeMax {
-                        Text("$\(Int(minPrice))–$\(Int(maxPrice))")
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(DesignTokens.accentCyan)
                     }
                 }
 
@@ -396,7 +398,7 @@ struct PlaceCard: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(place.name), rating \(String(format: "%.1f", place.rating)), \(place.priceLevel)")
+        .accessibilityLabel("\(place.name), rating \(String(format: "%.1f", place.rating)), \(placeType == .hotel ? place.formattedHotelPrice : place.formattedRestaurantPrice)")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 

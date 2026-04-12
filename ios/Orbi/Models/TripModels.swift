@@ -14,6 +14,7 @@ struct TripPreferencesRequest: Encodable {
     let restaurantPriceRange: String
     let cuisineType: String?
     let vibe: String
+    let familyFriendly: Bool
 }
 
 // MARK: - Itinerary Response
@@ -24,6 +25,7 @@ struct ItineraryResponse: Codable {
     let numDays: Int
     let vibe: String
     var days: [ItineraryDay]
+    var reasoningText: String?
 }
 
 struct ItineraryDay: Codable, Identifiable {
@@ -43,6 +45,7 @@ struct ItinerarySlot: Codable, Identifiable, Equatable {
     var estimatedDurationMin: Int
     var travelTimeToNextMin: Int?
     var estimatedCostUsd: Double?
+    var tag: String?
 
     var id: String { "\(timeSlot)-\(activityName)" }
 
@@ -64,7 +67,7 @@ struct ItineraryRestaurant: Codable {
 // MARK: - Replace Activity
 
 /// Request body for `POST /trips/replace-item`.
-/// Validates: Requirement 5.5
+/// Validates: Requirement 5.5, 11.1, 11.2, 11.3, 11.4
 struct ReplaceActivityRequest: Encodable {
     let destination: String
     let dayNumber: Int
@@ -72,6 +75,7 @@ struct ReplaceActivityRequest: Encodable {
     let currentActivityName: String
     let existingActivities: [String]
     let vibe: String
+    let adjacentActivityCoords: [[String: Double]]?
 }
 
 // MARK: - Cost Breakdown
@@ -129,6 +133,51 @@ struct PlaceRecommendation: Codable, Identifiable, Equatable {
         self.reviewCount = reviewCount
         self.priceRangeMin = priceRangeMin
         self.priceRangeMax = priceRangeMax
+    }
+
+    // MARK: - Pricing Format Helpers (Req 5, 6)
+
+    /// Maps a priceLevel string to a tier index: 1 (budget), 2 (mid-range), 3 (premium).
+    /// "$" → 1, "$$" → 2, "$$$" or more → 3. Defaults to 2 if unrecognized.
+    private var priceTier: Int {
+        let dollarCount = priceLevel.filter { $0 == "$" }.count
+        if dollarCount <= 1 { return 1 }
+        if dollarCount == 2 { return 2 }
+        return 3
+    }
+
+    /// Formats hotel pricing as "$XXX / night avg".
+    /// Uses average of priceRangeMin/priceRangeMax when available, else tier fallback.
+    /// Validates: Requirements 5.1, 5.2, 5.3, 5.4
+    var formattedHotelPrice: String {
+        if let min = priceRangeMin, let max = priceRangeMax, min > 0, max > 0 {
+            let avg = Int((min + max) / 2.0)
+            return "$\(avg) / night avg"
+        }
+        let fallback: Int
+        switch priceTier {
+        case 1: fallback = 80
+        case 3: fallback = 250
+        default: fallback = 150
+        }
+        return "$\(fallback) / night avg"
+    }
+
+    /// Formats restaurant pricing as "$XX–$XX per person".
+    /// Uses priceRangeMin/priceRangeMax when available, else tier fallback.
+    /// Validates: Requirements 6.1, 6.2, 6.3, 6.4
+    var formattedRestaurantPrice: String {
+        if let min = priceRangeMin, let max = priceRangeMax, min > 0, max > 0 {
+            return "$\(Int(min))–$\(Int(max)) per person"
+        }
+        let low: Int
+        let high: Int
+        switch priceTier {
+        case 1: low = 10; high = 20
+        case 3: low = 40; high = 80
+        default: low = 20; high = 40
+        }
+        return "$\(low)–$\(high) per person"
     }
 }
 

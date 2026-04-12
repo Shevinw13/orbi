@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Price Range Options
 
@@ -61,11 +62,15 @@ final class TripPreferencesViewModel: ObservableObject {
     @Published var restaurantPriceRange: PriceRange = .mid
     @Published var cuisineType: String = ""
     @Published var selectedVibe: TripVibe = .foodie
+    @Published var familyFriendly: Bool = false
     @Published var daysError: String?
     @Published var isLoading: Bool = false
     @Published var loadingMessage: String = "Generating your itinerary…"
     @Published var submissionError: String?
     @Published var generatedItinerary: ItineraryResponse?
+
+    /// Guards against double-firing haptic feedback (Req 16.4)
+    private var didFireHaptic: Bool = false
 
     let city: CityMarker
 
@@ -96,6 +101,7 @@ final class TripPreferencesViewModel: ObservableObject {
 
     func submit() async {
         submissionError = nil
+        didFireHaptic = false
         guard let days = validateDays() else { return }
 
         let request = TripPreferencesRequest(
@@ -107,7 +113,8 @@ final class TripPreferencesViewModel: ObservableObject {
             hotelVibe: hotelVibe == .none ? nil : hotelVibe.rawValue,
             restaurantPriceRange: restaurantPriceRange.rawValue,
             cuisineType: cuisineType.isEmpty ? nil : cuisineType,
-            vibe: selectedVibe.rawValue
+            vibe: selectedVibe.rawValue,
+            familyFriendly: familyFriendly
         )
 
         isLoading = true
@@ -120,6 +127,11 @@ final class TripPreferencesViewModel: ObservableObject {
                 .post, path: "/trips/generate", body: request
             )
             generatedItinerary = response
+            // Haptic feedback on successful itinerary generation (Req 16.1)
+            if !didFireHaptic {
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                didFireHaptic = true
+            }
             isLoading = false
         } catch let error as APIError {
             isLoading = false

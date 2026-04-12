@@ -108,17 +108,20 @@ struct CostBreakdownView: View {
 
     private func totalSection(cost: CostBreakdown) -> some View {
         VStack(spacing: 4) {
-            Text("Estimated Total")
+            Text("Estimated total cost")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Text("$\(Int(cost.total))")
                 .font(.system(size: 36, weight: .bold, design: .rounded))
                 .foregroundStyle(.orange)
+            Text("Based on average prices")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Estimated total trip cost: $\(Int(cost.total))")
+        .accessibilityLabel("Estimated total trip cost: $\(Int(cost.total)). Based on average prices.")
     }
 
     // MARK: - Category Breakdown (Req 8.1, 8.2, 8.3)

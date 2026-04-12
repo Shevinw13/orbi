@@ -3,20 +3,23 @@ import Foundation
 // MARK: - Share Formatter
 
 /// Formats trip itinerary data into human-readable plain text for sharing.
-/// Validates: Requirements 14.1, 14.2, 14.3, 14.4, 14.5
+/// Validates: Requirements 13.1, 13.2, 13.3, 13.4, 13.5
 struct ShareFormatter {
 
     /// Formats an itinerary response into plain text suitable for iMessage, Email, and Notes.
+    /// Includes activity costs, restaurant cuisine details, and a total estimated cost.
     /// - Parameter itinerary: The itinerary to format.
-    /// - Returns: A plain text string with title, day-by-day breakdown, and restaurant names.
+    /// - Returns: A plain text string with title, day-by-day breakdown, restaurant details, and total cost.
     static func formatTrip(_ itinerary: ItineraryResponse) -> String {
         var lines: [String] = []
+        var totalCost: Double = 0
+        var hasCostData = false
 
-        // Title line (Req 14.2)
+        // Title line (Req 13.1)
         lines.append("\(itinerary.numDays)-Day \(itinerary.destination) \(itinerary.vibe) Trip")
         lines.append("")
 
-        // Day-by-day breakdown (Req 14.3, 14.4)
+        // Day-by-day breakdown (Req 13.2, 13.5)
         for day in itinerary.days {
             lines.append("Day \(day.dayNumber):")
 
@@ -24,13 +27,19 @@ struct ShareFormatter {
                 lines.append("  No activities planned")
             } else {
                 for slot in day.slots {
-                    lines.append("  \(slot.activityName) (\(slot.timeSlot))")
+                    if let cost = slot.estimatedCostUsd, cost > 0 {
+                        lines.append("  \(slot.activityName) (\(slot.timeSlot)) ($\(Int(cost)))")
+                        totalCost += cost
+                        hasCostData = true
+                    } else {
+                        lines.append("  \(slot.activityName) (\(slot.timeSlot))")
+                    }
                 }
             }
 
-            // Restaurant name (Req 14.4)
+            // Restaurant with cuisine type (Req 13.5)
             if let restaurant = day.restaurant {
-                lines.append("  🍽 \(restaurant.name)")
+                lines.append("  🍽 \(restaurant.name) - \(restaurant.cuisine) (\(restaurant.priceLevel))")
             }
 
             lines.append("")
@@ -40,6 +49,11 @@ struct ShareFormatter {
         if itinerary.days.isEmpty {
             lines.append("No activities planned")
             lines.append("")
+        }
+
+        // Total estimated cost line (Req 13.3)
+        if hasCostData {
+            lines.append("Estimated Total: $\(Int(totalCost))")
         }
 
         return lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)

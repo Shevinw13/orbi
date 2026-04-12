@@ -1,35 +1,6 @@
 import SwiftUI
 import UIKit
 
-// MARK: - Share Formatter
-
-struct ShareFormatter {
-    static func formatTrip(_ itinerary: ItineraryResponse) -> String {
-        var lines: [String] = []
-        lines.append("\(itinerary.numDays)-Day \(itinerary.destination) \(itinerary.vibe) Trip")
-        lines.append("")
-        for day in itinerary.days {
-            lines.append("Day \(day.dayNumber):")
-            if day.slots.isEmpty {
-                lines.append("  No activities planned")
-            } else {
-                for slot in day.slots {
-                    lines.append("  \(slot.activityName) (\(slot.timeSlot))")
-                }
-            }
-            if let restaurant = day.restaurant {
-                lines.append("  🍽 \(restaurant.name)")
-            }
-            lines.append("")
-        }
-        if itinerary.days.isEmpty {
-            lines.append("No activities planned")
-            lines.append("")
-        }
-        return lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-}
-
 // MARK: - Trip Result Tabs
 
 /// Tabs displayed after itinerary generation.
@@ -69,7 +40,6 @@ struct TripResultView: View {
     @State private var isSaving: Bool = false
     @State private var saveError: String?
     @State private var showShareSheet: Bool = false
-    @State private var showSaveSuccess: Bool = false
 
     @StateObject private var itineraryVM: ItineraryViewModel
     @StateObject private var recommendationsVM: RecommendationsViewModel
@@ -136,17 +106,12 @@ struct TripResultView: View {
                     }
                     .foregroundStyle(DesignTokens.accentCyan)
                     .accessibilityLabel("Share trip")
-                    // Save button (Req 9.1)
-                    saveButton
+                    // Bookmark toggle (Req 10.1, 10.2, 10.3)
+                    bookmarkButton
                 }
             }
             .toolbarBackground(DesignTokens.backgroundPrimary, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
-            .alert("Trip Saved!", isPresented: $showSaveSuccess) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text("Your trip to \(itinerary.destination) has been saved to My Trips.")
-            }
             .alert("Save Error", isPresented: .constant(saveError != nil)) {
                 Button("OK") { saveError = nil }
             } message: {
@@ -158,6 +123,9 @@ struct TripResultView: View {
                 )
             }
             .onAppear {
+                // Check if trip is already saved (Req 10.4, 10.5)
+                loadPersistedBookmarkState()
+
                 // Wire hotel selection to cost recalculation (Req 8.5)
                 recommendationsVM.onHotelSelectionChanged = { hotel in
                     guard let hotel else { return }
@@ -165,6 +133,11 @@ struct TripResultView: View {
                         let rate = estimateNightlyRate(priceLevel: hotel.priceLevel)
                         await costVM.recalculate(hotelNightlyRate: rate)
                     }
+                }
+
+                // Check if trip is already saved on the server (Req 10.5)
+                if savedTripId == nil {
+                    Task { await checkIfAlreadySaved() }
                 }
             }
         }
@@ -242,6 +215,9 @@ struct TripResultView: View {
     private var itineraryTab: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
+                // "Why This Plan" reasoning card (Req 9.1, 9.2)
+                whyThisPlanCard
+
                 ForEach(itineraryVM.itinerary.days) { day in
                     InlineDaySectionView(day: day, viewModel: itineraryVM)
                 }
@@ -260,27 +236,62 @@ struct TripResultView: View {
         }
     }
 
-    // MARK: - Save Button (Req 9.1)
+    // MARK: - Why This Plan Card (Req 9.1, 9.2)
+
+    private var whyThisPlanCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Why This Plan", systemImage: "lightbulb.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(DesignTokens.accentCyan)
+
+            if let reasoning = itineraryVM.itinerary.reasoningText, !reasoning.isEmpty {
+                Text(reasoning)
+                    .font(.caption)
+                    .foregroundStyle(DesignTokens.textPrimary)
+                    .lineLimit(3)
+            }
+
+            Text("Optimized for minimal travel time and best experience flow")
+                .font(.caption2)
+                .foregroundStyle(DesignTokens.textSecondary)
+        }
+        .padding(DesignTokens.spacingMD)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassmorphic(cornerRadius: DesignTokens.radiusMD)
+        .padding(.horizontal, DesignTokens.spacingMD)
+        .padding(.vertical, DesignTokens.spacingSM)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Why This Plan")
+    }
+
+    // MARK: - Bookmark Button (Req 10.1, 10.2, 10.3)
 
     @ViewBuilder
-    private var saveButton: some View {
-        if savedTripId != nil {
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-                .accessibilityLabel("Trip saved")
-        } else {
-            Button {
-                Task { await saveTrip() }
-            } label: {
-                if isSaving {
-                    ProgressView()
-                        .controlSize(.small)
-                } else {
-                    Label("Save", systemImage: "square.and.arrow.down")
-                }
+    private var bookmarkButton: some View {
+        Button {
+            Task { await toggleBookmark() }
+        } label: {
+            if isSaving {
+                ProgressView()
+                    .controlSize(.small)
+            } else {
+                Image(systemName: savedTripId != nil ? "bookmark.fill" : "bookmark")
             }
-            .disabled(isSaving)
-            .accessibilityLabel("Save trip")
+        }
+        .foregroundStyle(DesignTokens.accentCyan)
+        .disabled(isSaving)
+        .accessibilityLabel(savedTripId != nil ? "Remove bookmark" : "Bookmark trip")
+    }
+
+    // MARK: - Bookmark Toggle (Req 10.2, 10.3)
+
+    private func toggleBookmark() async {
+        // Haptic feedback on bookmark tap (Req 16.2)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        if let tripId = savedTripId {
+            await unsaveTrip(tripId: tripId)
+        } else {
+            await saveTrip()
         }
     }
 
@@ -307,7 +318,7 @@ struct TripResultView: View {
                 .post, path: "/trips", body: request
             )
             savedTripId = response.id
-            showSaveSuccess = true
+            persistBookmarkState(tripId: response.id)
         } catch let error as APIError {
             saveError = error.errorDescription
         } catch {
@@ -315,6 +326,68 @@ struct TripResultView: View {
         }
 
         isSaving = false
+    }
+
+    // MARK: - Unsave Trip (Req 10.3)
+
+    private func unsaveTrip(tripId: String) async {
+        isSaving = true
+        saveError = nil
+
+        do {
+            try await APIClient.shared.requestVoid(
+                .delete, path: "/trips/\(tripId)"
+            )
+            savedTripId = nil
+            clearPersistedBookmarkState()
+        } catch let error as APIError {
+            saveError = error.errorDescription
+        } catch {
+            saveError = "Failed to remove trip. Please try again."
+        }
+
+        isSaving = false
+    }
+
+    // MARK: - Bookmark Persistence (Req 10.4)
+
+    /// Key used to persist the saved trip ID in UserDefaults, scoped to this trip's identity.
+    private var bookmarkPersistenceKey: String {
+        "bookmark_\(itinerary.destination)_\(itinerary.numDays)_\(itinerary.vibe)"
+    }
+
+    private func persistBookmarkState(tripId: String) {
+        UserDefaults.standard.set(tripId, forKey: bookmarkPersistenceKey)
+    }
+
+    private func clearPersistedBookmarkState() {
+        UserDefaults.standard.removeObject(forKey: bookmarkPersistenceKey)
+    }
+
+    private func loadPersistedBookmarkState() {
+        if let persisted = UserDefaults.standard.string(forKey: bookmarkPersistenceKey) {
+            savedTripId = persisted
+        }
+    }
+
+    // MARK: - Check If Already Saved (Req 10.5)
+
+    private func checkIfAlreadySaved() async {
+        do {
+            let trips: [TripListItem] = try await APIClient.shared.request(
+                .get, path: "/trips"
+            )
+            if let match = trips.first(where: {
+                $0.destination == itinerary.destination
+                && $0.numDays == itinerary.numDays
+                && $0.vibe == itinerary.vibe
+            }) {
+                savedTripId = match.id
+                persistBookmarkState(tripId: match.id)
+            }
+        } catch {
+            // Silently fail — bookmark will just show unfilled
+        }
     }
 
     // MARK: - Helpers
@@ -407,6 +480,17 @@ struct InlineDaySectionView: View {
                     .foregroundStyle(DesignTokens.accentCyan)
             }
             .accessibilityLabel("Show map route for Day \(day.dayNumber)")
+            // Open in Apple Maps button (Req 8.1, 8.2)
+            Button {
+                viewModel.openInAppleMaps(day: day)
+            } label: {
+                Label("Apple Maps", systemImage: "map.fill")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(DesignTokens.accentCyan)
+            }
+            .disabled(day.slots.isEmpty)
+            .opacity(day.slots.isEmpty ? 0.4 : 1.0)
+            .accessibilityLabel("Open Day \(day.dayNumber) in Apple Maps")
             Text("\(day.slots.count) activities")
                 .font(.caption)
                 .foregroundStyle(DesignTokens.textSecondary)
@@ -440,6 +524,17 @@ struct InlineDaySectionView: View {
                 Text(slot.activityName)
                     .font(.body.weight(.medium))
                     .foregroundStyle(DesignTokens.textPrimary)
+                if let tag = slot.tag, !tag.isEmpty {
+                    Text(tag)
+                        .font(.caption2)
+                        .foregroundStyle(DesignTokens.accentCyan)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(
+                            Capsule()
+                                .fill(DesignTokens.accentCyan.opacity(0.2))
+                        )
+                }
                 Text(slot.description)
                     .font(.caption)
                     .foregroundStyle(DesignTokens.textSecondary)

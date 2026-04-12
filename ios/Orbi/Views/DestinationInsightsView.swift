@@ -86,12 +86,7 @@ struct DestinationInsightsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .glassmorphic(cornerRadius: DesignTokens.radiusSM)
             } else if weatherVM.errorMessage != nil {
-                Text("Weather data unavailable")
-                    .font(.caption)
-                    .foregroundStyle(DesignTokens.textTertiary)
-                    .padding(DesignTokens.spacingSM)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .glassmorphic(cornerRadius: DesignTokens.radiusSM)
+                EmptyView()
             }
         }
         .task {

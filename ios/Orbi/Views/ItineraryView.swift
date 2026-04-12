@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import MapKit
 
 // MARK: - Itinerary ViewModel
@@ -21,8 +22,22 @@ final class ItineraryViewModel: ObservableObject {
     @Published var draggingSlot: ItinerarySlot?
     @Published var draggingFromDay: Int?
 
+    /// Guards against double-firing haptic feedback (Req 16.4)
+    private var didFireReplaceHaptic: Bool = false
+
     init(itinerary: ItineraryResponse) {
         self.itinerary = itinerary
+        // Auto-optimize days with ≥3 activities on load (Req 7.1)
+        autoOptimizeAllDays()
+    }
+
+    // MARK: - Auto-Optimization (Req 7.1)
+
+    /// Automatically optimizes all days with ≥3 slots using nearest-neighbor.
+    private func autoOptimizeAllDays() {
+        for day in itinerary.days where day.slots.count >= 3 {
+            optimizeDay(day.dayNumber)
+        }
     }
 
     // MARK: - Reorder within day (Req 5.3)
@@ -51,15 +66,36 @@ final class ItineraryViewModel: ObservableObject {
     func replaceActivity(dayNumber: Int, slot: ItinerarySlot) async {
         isReplacing = true
         errorMessage = nil
+        didFireReplaceHaptic = false
 
         let allActivities = itinerary.days.flatMap { $0.slots.map(\.activityName) }
+
+        // Build adjacent activity coordinates (Req 11.1–11.4)
+        var adjacentCoords: [[String: Double]]?
+        if let day = itinerary.days.first(where: { $0.dayNumber == dayNumber }),
+           let slotIndex = day.slots.firstIndex(where: { $0 == slot }) {
+            var coords: [[String: Double]] = []
+            if slotIndex > 0 {
+                let prev = day.slots[slotIndex - 1]
+                coords.append(["lat": prev.latitude, "lng": prev.longitude])
+            }
+            if slotIndex < day.slots.count - 1 {
+                let next = day.slots[slotIndex + 1]
+                coords.append(["lat": next.latitude, "lng": next.longitude])
+            }
+            if !coords.isEmpty {
+                adjacentCoords = coords
+            }
+        }
+
         let request = ReplaceActivityRequest(
             destination: itinerary.destination,
             dayNumber: dayNumber,
             timeSlot: slot.timeSlot,
             currentActivityName: slot.activityName,
             existingActivities: allActivities,
-            vibe: itinerary.vibe
+            vibe: itinerary.vibe,
+            adjacentActivityCoords: adjacentCoords
         )
 
         do {
@@ -71,6 +107,11 @@ final class ItineraryViewModel: ObservableObject {
                 itinerary.days[dayIndex].slots[slotIndex] = newSlot
             }
             recalculateCost()
+            // Haptic feedback on successful activity replacement (Req 16.3)
+            if !didFireReplaceHaptic {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                didFireReplaceHaptic = true
+            }
         } catch let error as APIError {
             errorMessage = error.errorDescription
         } catch {
@@ -170,6 +211,27 @@ final class ItineraryViewModel: ObservableObject {
                 sin(dLon / 2) * sin(dLon / 2)
         let c = 2 * atan2(sqrt(a), sqrt(1 - a))
         return R * c
+    }
+
+    // MARK: - Open in Apple Maps (Req 8.1, 8.2)
+
+    /// Opens Apple Maps with walking directions through all activity waypoints for the given day.
+    func openInAppleMaps(day: ItineraryDay) {
+        let validSlots = day.slots.filter { $0.latitude != 0 || $0.longitude != 0 }
+        guard !validSlots.isEmpty else { return }
+
+        let mapItems = validSlots.map { slot -> MKMapItem in
+            let coordinate = CLLocationCoordinate2D(latitude: slot.latitude, longitude: slot.longitude)
+            let placemark = MKPlacemark(coordinate: coordinate)
+            let item = MKMapItem(placemark: placemark)
+            item.name = slot.activityName
+            return item
+        }
+
+        let launchOptions: [String: Any] = [
+            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeWalking
+        ]
+        MKMapItem.openMaps(with: mapItems, launchOptions: launchOptions)
     }
 
     // MARK: - Cost recalculation (Req 8.5)
@@ -272,6 +334,9 @@ struct ItineraryView: View {
 
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0) {
+                            // "Why This Plan" reasoning card (Req 9.1, 9.2)
+                            whyThisPlanCard
+
                             if let day = viewModel.itinerary.days.first(where: { $0.dayNumber == selectedDay }) {
                                 daySectionView(day: day)
                             }
@@ -316,6 +381,35 @@ struct ItineraryView: View {
                 viewModel.recalculateCost()
             }
         }
+    }
+
+
+    // MARK: - Why This Plan Card (Req 9.1, 9.2)
+
+    private var whyThisPlanCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Why This Plan", systemImage: "lightbulb.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(DesignTokens.accentCyan)
+
+            if let reasoning = viewModel.itinerary.reasoningText, !reasoning.isEmpty {
+                Text(reasoning)
+                    .font(.caption)
+                    .foregroundStyle(DesignTokens.textPrimary)
+                    .lineLimit(3)
+            }
+
+            Text("Optimized for minimal travel time and best experience flow")
+                .font(.caption2)
+                .foregroundStyle(DesignTokens.textSecondary)
+        }
+        .padding(DesignTokens.spacingMD)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassmorphic(cornerRadius: DesignTokens.radiusMD)
+        .padding(.horizontal, DesignTokens.spacingMD)
+        .padding(.vertical, DesignTokens.spacingSM)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Why This Plan")
     }
 
 
@@ -375,6 +469,17 @@ struct ItineraryView: View {
                     .foregroundStyle(DesignTokens.accentCyan)
             }
             .accessibilityLabel("Show map route for Day \(day.dayNumber)")
+            // Open in Apple Maps button (Req 8.1, 8.2)
+            Button {
+                viewModel.openInAppleMaps(day: day)
+            } label: {
+                Label("Apple Maps", systemImage: "map.fill")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(DesignTokens.accentCyan)
+            }
+            .disabled(day.slots.isEmpty)
+            .opacity(day.slots.isEmpty ? 0.4 : 1.0)
+            .accessibilityLabel("Open Day \(day.dayNumber) in Apple Maps")
             Text("\(day.slots.count) activities")
                 .font(.caption)
                 .foregroundStyle(DesignTokens.textSecondary)
@@ -410,6 +515,17 @@ struct ItineraryView: View {
                 Text(slot.activityName)
                     .font(.body.weight(.medium))
                     .foregroundStyle(DesignTokens.textPrimary)
+                if let tag = slot.tag, !tag.isEmpty {
+                    Text(tag)
+                        .font(.caption2)
+                        .foregroundStyle(DesignTokens.accentCyan)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(
+                            Capsule()
+                                .fill(DesignTokens.accentCyan.opacity(0.2))
+                        )
+                }
                 Text(slot.description)
                     .font(.caption)
                     .foregroundStyle(DesignTokens.textSecondary)
