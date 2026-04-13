@@ -351,6 +351,7 @@ struct PreferencesOverlay: View {
     var body: some View {
         VStack(spacing: 0) {
             Spacer()
+            ScrollView {
             VStack(spacing: 18) {
                 // Back button
                 HStack {
@@ -454,7 +455,7 @@ struct PreferencesOverlay: View {
                     Text("Vibe")
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(DesignTokens.textSecondary)
-                    FlowLayout(spacing: DesignTokens.spacingSM) {
+                    HStack(spacing: 6) {
                         ForEach(TripVibe.allCases) { vibe in
                             vibePill(vibe)
                         }
@@ -519,6 +520,7 @@ struct PreferencesOverlay: View {
             .padding(22)
             .glassmorphic(cornerRadius: DesignTokens.radiusXL)
             .padding(.horizontal, 10)
+            } // ScrollView
             .padding(.bottom, DesignTokens.tabBarHeight + DesignTokens.spacingSM)
         }
     }
@@ -542,9 +544,9 @@ struct PreferencesOverlay: View {
     private func vibePill(_ vibe: TripVibe) -> some View {
         let isSelected = viewModel.selectedVibe == vibe
         return Text(vibe.rawValue)
-            .font(.subheadline.weight(.medium))
-            .padding(.horizontal, 16)
-            .padding(.vertical, 9)
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
             .background(
                 Group {
                     if isSelected {
