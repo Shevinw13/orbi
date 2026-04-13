@@ -13,7 +13,7 @@ from starlette.responses import JSONResponse
 from backend.services.auth import decode_access_token
 
 # Paths that do not require authentication
-PUBLIC_PATH_PREFIXES = ("/auth", "/share", "/health", "/docs", "/openapi.json", "/search")
+PUBLIC_PATH_PREFIXES = ("/auth", "/share", "/health", "/docs", "/openapi.json", "/search", "/destinations")
 
 # Specific public paths (not prefix-based)
 PUBLIC_PATHS = {"/search/popular-cities"}
