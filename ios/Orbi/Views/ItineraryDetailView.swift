@@ -9,6 +9,9 @@ final class ItineraryDetailViewModel: ObservableObject {
     @Published var isLoading: Bool = false
     @Published var isSaving: Bool = false
     @Published var hasSaved: Bool = false
+    @Published var isLiking: Bool = false
+    @Published var hasLiked: Bool = false
+    @Published var likeCount: Int = 0
     @Published var errorMessage: String?
     @Published var saveError: String?
 
@@ -20,6 +23,7 @@ final class ItineraryDetailViewModel: ObservableObject {
                 .get, path: "/shared-itineraries/\(id)", requiresAuth: false
             )
             detail = result
+            likeCount = result.saveCount
         } catch let error as APIError {
             errorMessage = error.errorDescription
         } catch {
@@ -158,9 +162,31 @@ struct ItineraryDetailView: View {
                         .padding(DesignTokens.spacingLG)
                 }
 
-                // Save button
-                saveButton
-                    .padding(DesignTokens.spacingMD)
+                // Action buttons
+                HStack(spacing: DesignTokens.spacingSM) {
+                    // Like button
+                    Button {
+                        if !viewModel.hasLiked {
+                            viewModel.hasLiked = true
+                            viewModel.likeCount += 1
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: viewModel.hasLiked ? "heart.fill" : "heart")
+                                .foregroundStyle(viewModel.hasLiked ? .red : DesignTokens.textSecondary)
+                            Text("\(viewModel.likeCount)")
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(DesignTokens.textPrimary)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .glassmorphic(cornerRadius: DesignTokens.radiusMD)
+                    }
+
+                    // Save to My Trips button
+                    saveButton
+                }
+                .padding(DesignTokens.spacingMD)
             }
             .padding(.bottom, 24)
         }

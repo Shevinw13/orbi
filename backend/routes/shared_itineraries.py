@@ -74,7 +74,18 @@ async def get_itinerary_detail(itinerary_id: str):
 @router.post("/{itinerary_id}/copy", response_model=SharedItineraryCopyResponse)
 async def copy_itinerary(itinerary_id: str, request: Request):
     """Copy a shared itinerary to the user's trips. Auth required."""
-    user_id: str = request.state.user_id
+    from backend.services.auth import decode_access_token
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing auth token")
+    token = auth_header.split(" ", 1)[1]
+    try:
+        payload = decode_access_token(token)
+        user_id = payload.get("sub")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Token missing user identity")
     try:
         result = await copy_shared_itinerary(itinerary_id, user_id)
         return SharedItineraryCopyResponse(**result)
