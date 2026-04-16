@@ -46,7 +46,7 @@ class SharedItineraryPublishRequest(BaseModel):
     """Publish metadata sent by the client."""
 
     source_trip_id: str = Field(..., min_length=1, description="ID of the trip to publish")
-    cover_photo_url: str = Field(..., min_length=1, description="Cover photo URL")
+    cover_photo_url: str = Field("", description="Cover photo URL (optional)")
     title: str = Field(..., min_length=1, max_length=100, description="Title (1-100 chars)")
     description: str = Field(..., min_length=1, max_length=500, description="Description (1-500 chars)")
     destination: str = Field(..., min_length=1, description="Destination city")
@@ -65,13 +65,6 @@ class SharedItineraryPublishRequest(BaseModel):
     def description_not_blank(cls, v: str) -> str:
         if not v.strip():
             raise ValueError("Description must not be blank")
-        return v.strip()
-
-    @field_validator("cover_photo_url")
-    @classmethod
-    def cover_photo_not_blank(cls, v: str) -> str:
-        if not v.strip():
-            raise ValueError("Cover photo URL must not be blank")
         return v.strip()
 
     @field_validator("destination")

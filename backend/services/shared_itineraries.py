@@ -183,7 +183,7 @@ async def publish_shared_itinerary(
         "destination": destination,
         "destination_lat_lng": trip.get("destination_lat_lng"),
         "budget_level": budget_level,
-        "cover_photo_url": cover_photo_url,
+        "cover_photo_url": cover_photo_url or "",
         "tags": tags or [],
         "num_days": trip["num_days"],
         "itinerary": itinerary,
