@@ -5,7 +5,11 @@ Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, HTTPException, Query, Request
+
+logger = logging.getLogger(__name__)
 
 from backend.models.shared_itinerary import (
     SharedItineraryCopyResponse,
@@ -93,7 +97,7 @@ async def publish_itinerary(body: SharedItineraryPublishRequest, request: Reques
             destination=body.destination,
             budget_level=body.budget_level,
             cover_photo_url=body.cover_photo_url,
-            tags=body.tags,
+            tags=body.tags or [],
         )
         return result
     except ValueError as exc:
@@ -101,4 +105,5 @@ async def publish_itinerary(body: SharedItineraryPublishRequest, request: Reques
     except PermissionError:
         raise HTTPException(status_code=403, detail="You do not have access to this trip")
     except Exception as exc:
+        logger.error("Failed to publish itinerary: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to publish itinerary: {exc}")

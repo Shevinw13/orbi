@@ -51,7 +51,7 @@ class SharedItineraryPublishRequest(BaseModel):
     description: str = Field(..., min_length=1, max_length=500, description="Description (1-500 chars)")
     destination: str = Field(..., min_length=1, description="Destination city")
     budget_level: int = Field(..., ge=1, le=5, description="Budget level 1-5")
-    tags: list[str] = Field(default_factory=list, description="Optional tags")
+    tags: list[str] | None = Field(default_factory=list, description="Optional tags")
 
     @field_validator("title")
     @classmethod

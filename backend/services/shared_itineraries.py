@@ -5,9 +5,12 @@ Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 6.1, 6.2, 6.3, 6.4, 7.4, 7.5, 11.1
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from backend.config import settings
+
+logger = logging.getLogger(__name__)
 
 _supabase_client = None
 
@@ -186,11 +189,12 @@ async def publish_shared_itinerary(
         "cover_photo_url": cover_photo_url or "",
         "tags": tags or [],
         "num_days": trip["num_days"],
-        "itinerary": itinerary,
+        "itinerary": itinerary or {},
     }
 
     result = sb.table("shared_itineraries").insert(row).execute()
     if not result.data:
+        logger.error("Supabase insert returned no data for shared itinerary publish")
         raise RuntimeError("Failed to publish shared itinerary")
 
     return result.data[0]
