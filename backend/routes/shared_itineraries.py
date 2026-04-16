@@ -87,9 +87,19 @@ async def copy_itinerary(itinerary_id: str, request: Request):
 @router.post("", status_code=201)
 async def publish_itinerary(body: SharedItineraryPublishRequest, request: Request):
     """Publish a trip as a shared itinerary. Auth required."""
-    user_id = getattr(request.state, "user_id", None)
+    # Decode token directly to avoid BaseHTTPMiddleware state issues
+    from backend.services.auth import decode_access_token
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing auth token")
+    token = auth_header.split(" ", 1)[1]
+    try:
+        payload = decode_access_token(token)
+        user_id = payload.get("sub")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
     if not user_id:
-        raise HTTPException(status_code=401, detail="Authentication required")
+        raise HTTPException(status_code=401, detail="Token missing user identity")
     logger.info("Publish request: user=%s, trip=%s, title=%s, dest=%s, budget=%s",
                 user_id, body.source_trip_id, body.title, body.destination, body.budget_level)
     try:

@@ -63,7 +63,9 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
 
         try:
             payload = decode_access_token(token)
-        except Exception:
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning("JWT decode failed: %s", exc)
             return JSONResponse(
                 status_code=401,
                 content={"error": "unauthorized", "message": "Invalid or expired token"},
@@ -71,4 +73,11 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
 
         # Attach user identity to request state for downstream handlers
         request.state.user_id = payload.get("sub")
+        if not request.state.user_id:
+            import logging
+            logging.getLogger(__name__).warning("JWT payload missing 'sub': %s", payload)
+            return JSONResponse(
+                status_code=401,
+                content={"error": "unauthorized", "message": "Token missing user identity"},
+            )
         return await call_next(request)
