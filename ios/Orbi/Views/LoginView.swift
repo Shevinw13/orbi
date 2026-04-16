@@ -33,7 +33,7 @@ struct LoginView: View {
                         showName: false,
                         authService: authService,
                         onBack: { withAnimation(.spring) { screen = .welcome } },
-                        onSubmit: { email, password, _ in
+                        onSubmit: { email, password, _, _ in
                             await authService.login(email: email, password: password)
                         }
                     )
@@ -45,8 +45,8 @@ struct LoginView: View {
                         showName: true,
                         authService: authService,
                         onBack: { withAnimation(.spring) { screen = .welcome } },
-                        onSubmit: { email, password, name in
-                            await authService.register(email: email, password: password, name: name)
+                        onSubmit: { email, password, name, username in
+                            await authService.register(email: email, password: password, name: name, username: username)
                         }
                     )
                 }
@@ -151,11 +151,12 @@ struct AuthFormScreen: View {
     let showName: Bool
     @ObservedObject var authService: AuthService
     let onBack: () -> Void
-    let onSubmit: (String, String, String?) async -> Void
+    let onSubmit: (String, String, String?, String?) async -> Void
 
     @State private var name = ""
     @State private var email = ""
     @State private var password = ""
+    @State private var username = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -190,6 +191,7 @@ struct AuthFormScreen: View {
                 VStack(spacing: 14) {
                     if showName {
                         fieldRow(icon: "person.fill", placeholder: "Your name", text: $name)
+                        fieldRow(icon: "at", placeholder: "Username (optional)", text: $username)
                     }
                     fieldRow(icon: "envelope.fill", placeholder: "Email address", text: $email, isEmail: true)
                     fieldRow(icon: "lock.fill", placeholder: "Password", text: $password, isSecure: true)
@@ -205,7 +207,7 @@ struct AuthFormScreen: View {
 
                 Button {
                     Task {
-                        await onSubmit(email, password, name.isEmpty ? nil : name)
+                        await onSubmit(email, password, name.isEmpty ? nil : name, username.isEmpty ? nil : username)
                     }
                 } label: {
                     HStack {

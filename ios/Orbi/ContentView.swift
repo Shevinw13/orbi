@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 // MARK: - Main Content View (Custom Floating Tab Bar)
 
@@ -597,13 +598,48 @@ struct ProfileTab: View {
     @State private var username: String = ""
     @State private var isEditingUsername: Bool = false
     @State private var usernameError: String?
+    @State private var profileImageData: Data?
+    @State private var selectedPhotoItem: PhotosPickerItem?
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
                     HStack(spacing: 14) {
-                        Image(systemName: "person.circle.fill").font(.system(size: 48)).foregroundStyle(DesignTokens.accentCyan)
+                        PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                            if let data = profileImageData, let uiImage = UIImage(data: data) {
+                                Image(uiImage: uiImage)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 56, height: 56)
+                                    .clipShape(Circle())
+                                    .overlay(
+                                        Circle().stroke(DesignTokens.accentCyan, lineWidth: 2)
+                                    )
+                            } else {
+                                ZStack {
+                                    Image(systemName: "person.circle.fill")
+                                        .font(.system(size: 48))
+                                        .foregroundStyle(DesignTokens.accentCyan)
+                                    Image(systemName: "camera.fill")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(.white)
+                                        .padding(4)
+                                        .background(DesignTokens.accentCyan)
+                                        .clipShape(Circle())
+                                        .offset(x: 16, y: 16)
+                                }
+                            }
+                        }
+                        .onChange(of: selectedPhotoItem) { _, newItem in
+                            Task {
+                                if let data = try? await newItem?.loadTransferable(type: Data.self) {
+                                    profileImageData = data
+                                    // Persist locally
+                                    UserDefaults.standard.set(data, forKey: "profileImageData")
+                                }
+                            }
+                        }
                         VStack(alignment: .leading, spacing: 4) {
                             Text(authService.displayName ?? "User").font(.headline).foregroundStyle(DesignTokens.textPrimary)
                             if !username.isEmpty {
@@ -651,6 +687,14 @@ struct ProfileTab: View {
             .navigationTitle("Profile")
             .scrollContentBackground(.hidden)
             .background(DesignTokens.backgroundPrimary)
+            .onAppear {
+                if let data = UserDefaults.standard.data(forKey: "profileImageData") {
+                    profileImageData = data
+                }
+                if let savedUsername = authService.username, !savedUsername.isEmpty {
+                    username = savedUsername
+                }
+            }
         }
     }
 }

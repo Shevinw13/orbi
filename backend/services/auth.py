@@ -261,6 +261,8 @@ async def apple_sign_in(identity_token: str, name: str | None = None) -> dict[st
         "token_type": "bearer",
         "expires_in": expires_in,
         "user_id": user["id"],
+        "name": user.get("name"),
+        "username": user.get("username"),
     }
 
 
@@ -294,6 +296,8 @@ async def google_sign_in(id_token: str) -> dict[str, Any]:
         "token_type": "bearer",
         "expires_in": expires_in,
         "user_id": user["id"],
+        "name": user.get("name"),
+        "username": user.get("username"),
     }
 
 
@@ -332,6 +336,8 @@ async def email_register(email: str, password: str, name: str | None = None, use
         "auth_provider": "email",
         "password_hash": hash_password(password),
     }
+    if username:
+        new_user["username"] = username
     insert_result = sb.table("users").insert(new_user).execute()
     user = insert_result.data[0]
 
@@ -345,6 +351,8 @@ async def email_register(email: str, password: str, name: str | None = None, use
         "token_type": "bearer",
         "expires_in": expires_in,
         "user_id": user["id"],
+        "name": user.get("name"),
+        "username": user.get("username"),
     }
 
 
@@ -378,6 +386,8 @@ async def email_login(email: str | None, password: str, username: str | None = N
         "token_type": "bearer",
         "expires_in": expires_in,
         "user_id": user["id"],
+        "name": user.get("name"),
+        "username": user.get("username"),
     }
 
 

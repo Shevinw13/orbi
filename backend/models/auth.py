@@ -36,6 +36,8 @@ class AuthResponse(BaseModel):
     token_type: str = "bearer"
     expires_in: int = Field(description="Access token lifetime in seconds")
     user_id: str
+    name: str | None = None
+    username: str | None = None
 
 
 class EmailRegisterRequest(BaseModel):
