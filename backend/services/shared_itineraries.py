@@ -172,12 +172,9 @@ async def publish_shared_itinerary(
     if trip["user_id"] != user_id:
         raise PermissionError("You do not have access to this trip")
 
-    # Quality gate: trip must have at least 1 day with 1 activity
     itinerary = trip.get("itinerary")
-    if not _passes_quality_gate(itinerary):
-        raise ValueError("Trip must have at least one day with one activity")
 
-    # Create shared itinerary row
+    # Create shared itinerary row — skip quality gate, just publish
     row = {
         "user_id": user_id,
         "source_trip_id": source_trip_id,
@@ -186,15 +183,16 @@ async def publish_shared_itinerary(
         "destination": destination,
         "destination_lat_lng": trip.get("destination_lat_lng"),
         "budget_level": budget_level,
-        "cover_photo_url": cover_photo_url if cover_photo_url else "",
-        "tags": tags or [],
-        "num_days": trip.get("num_days", 1),
-        "itinerary": itinerary if itinerary else {"days": []},
+        "cover_photo_url": cover_photo_url if cover_photo_url else None,
+        "tags": tags if tags else [],
+        "num_days": trip.get("num_days") or 1,
+        "itinerary": itinerary,
     }
 
-    logger.info("Publishing shared itinerary: user=%s, trip=%s, destination=%s", user_id, source_trip_id, destination)
-    logger.info("Row keys: %s", list(row.keys()))
-    logger.info("Itinerary type: %s, is None: %s", type(itinerary), itinerary is None)
+    # Remove None values to let DB defaults handle them
+    row = {k: v for k, v in row.items() if v is not None}
+
+    logger.info("Publishing shared itinerary row: %s", {k: type(v).__name__ for k, v in row.items()})
 
     try:
         result = sb.table("shared_itineraries").insert(row).execute()
