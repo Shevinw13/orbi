@@ -11,21 +11,64 @@ final class WeatherViewModel: ObservableObject {
     func loadWeather(latitude: Double, longitude: Double) async {
         isLoading = true
         errorMessage = nil
+
+        // Call Open-Meteo directly from the client — bypasses backend cold start
+        let urlString = "https://api.open-meteo.com/v1/forecast?latitude=\(latitude)&longitude=\(longitude)&daily=temperature_2m_max,temperature_2m_min,weather_code&temperature_unit=fahrenheit&timezone=auto&forecast_days=1"
+
+        guard let url = URL(string: urlString) else {
+            errorMessage = "Invalid coordinates"
+            isLoading = false
+            return
+        }
+
         do {
-            let response: DestinationWeather = try await APIClient.shared.request(
-                .get, path: "/destinations/weather",
-                queryItems: [
-                    URLQueryItem(name: "latitude", value: String(latitude)),
-                    URLQueryItem(name: "longitude", value: String(longitude)),
-                ],
-                requiresAuth: false
+            let (data, _) = try await URLSession.shared.data(from: url)
+            let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            let daily = json?["daily"] as? [String: Any]
+            let highs = daily?["temperature_2m_max"] as? [Double]
+            let lows = daily?["temperature_2m_min"] as? [Double]
+            let codes = daily?["weather_code"] as? [Int]
+
+            let tempHigh = highs?.first ?? 0
+            let tempLow = lows?.first ?? 0
+            let code = codes?.first ?? 0
+            let condition = weatherCondition(from: code)
+            let bestTime = bestTimeToVisit(latitude: latitude)
+
+            weather = DestinationWeather(
+                tempHigh: tempHigh,
+                tempLow: tempLow,
+                condition: condition,
+                bestTimeToVisit: bestTime
             )
-            weather = response
         } catch {
-            errorMessage = "Weather data unavailable"
-            weather = nil
+            errorMessage = "Weather unavailable"
         }
         isLoading = false
+    }
+
+    private func weatherCondition(from code: Int) -> String {
+        switch code {
+        case 0: return "Clear sky"
+        case 1: return "Mainly clear"
+        case 2: return "Partly cloudy"
+        case 3: return "Overcast"
+        case 45, 48: return "Foggy"
+        case 51, 53, 55: return "Drizzle"
+        case 61, 63, 65: return "Rain"
+        case 71, 73, 75: return "Snow"
+        case 80, 81, 82: return "Rain showers"
+        case 95: return "Thunderstorm"
+        default: return "Partly cloudy"
+        }
+    }
+
+    private func bestTimeToVisit(latitude: Double) -> String {
+        let absLat = abs(latitude)
+        if absLat < 15 { return "November – March (dry season)" }
+        if absLat < 30 { return "October – April (mild weather)" }
+        if absLat < 50 { return "May – September (summer)" }
+        return "June – August (warmest months)"
     }
 }
 
