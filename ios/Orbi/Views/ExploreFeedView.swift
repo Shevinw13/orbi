@@ -17,7 +17,6 @@ final class ExploreFeedViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
         do {
-            // Single call to get all itineraries, then split into sections client-side
             let all: ExploreFeedResponse = try await APIClient.shared.request(
                 .get, path: "/shared-itineraries",
                 queryItems: [URLQueryItem(name: "page_size", value: "50")],
@@ -25,16 +24,15 @@ final class ExploreFeedViewModel: ObservableObject {
             )
 
             var builtSections: [ExploreSection] = []
-            
-            // All items become "Browse All"
             if !all.items.isEmpty {
                 builtSections.append(ExploreSection(id: "all", title: "Browse All", sectionType: "recent", items: all.items))
             }
             sections = builtSections
-        } catch let error as APIError {
-            errorMessage = error.errorDescription
         } catch {
-            errorMessage = "Failed to load explore feed."
+            // Show the actual error for debugging
+            let desc = (error as? APIError)?.errorDescription ?? error.localizedDescription
+            errorMessage = desc
+            print("EXPLORE LOAD ERROR: \(error)")
         }
         isLoading = false
     }
