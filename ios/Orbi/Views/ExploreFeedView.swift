@@ -17,34 +17,18 @@ final class ExploreFeedViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
         do {
-            // Load featured
-            let featured: ExploreFeedResponse = try await APIClient.shared.request(
+            // Single call to get all itineraries, then split into sections client-side
+            let all: ExploreFeedResponse = try await APIClient.shared.request(
                 .get, path: "/shared-itineraries",
-                queryItems: [URLQueryItem(name: "section", value: "featured"), URLQueryItem(name: "page_size", value: "10")],
-                requiresAuth: false
-            )
-            // Load trending
-            let trending: ExploreFeedResponse = try await APIClient.shared.request(
-                .get, path: "/shared-itineraries",
-                queryItems: [URLQueryItem(name: "section", value: "trending"), URLQueryItem(name: "page_size", value: "10")],
-                requiresAuth: false
-            )
-            // Load recent (browse all)
-            let recent: ExploreFeedResponse = try await APIClient.shared.request(
-                .get, path: "/shared-itineraries",
-                queryItems: [URLQueryItem(name: "page_size", value: "20")],
+                queryItems: [URLQueryItem(name: "page_size", value: "50")],
                 requiresAuth: false
             )
 
             var builtSections: [ExploreSection] = []
-            if !featured.items.isEmpty {
-                builtSections.append(ExploreSection(id: "featured", title: "Featured", sectionType: "featured", items: featured.items))
-            }
-            if !trending.items.isEmpty {
-                builtSections.append(ExploreSection(id: "trending", title: "Trending", sectionType: "trending", items: trending.items))
-            }
-            if !recent.items.isEmpty {
-                builtSections.append(ExploreSection(id: "recent", title: "Browse All", sectionType: "recent", items: recent.items))
+            
+            // All items become "Browse All"
+            if !all.items.isEmpty {
+                builtSections.append(ExploreSection(id: "all", title: "Browse All", sectionType: "recent", items: all.items))
             }
             sections = builtSections
         } catch let error as APIError {
@@ -155,6 +139,26 @@ struct ExploreFeedView: View {
             Spacer()
         } else if viewModel.isSearchActive {
             searchResultsList
+        } else if viewModel.sections.isEmpty {
+            ScrollView {
+                VStack(spacing: 16) {
+                    Spacer().frame(height: 60)
+                    Image(systemName: "globe.americas")
+                        .font(.system(size: 48))
+                        .foregroundStyle(DesignTokens.accentCyan.opacity(0.5))
+                    Text("No itineraries yet")
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(DesignTokens.textPrimary)
+                    Text("Be the first to share a trip! Create an itinerary and publish it to Explore.")
+                        .font(.subheadline)
+                        .foregroundStyle(DesignTokens.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .refreshable { await viewModel.refresh() }
         } else {
             sectionsFeed
         }
