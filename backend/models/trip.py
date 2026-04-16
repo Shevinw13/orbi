@@ -39,6 +39,8 @@ class TripResponse(BaseModel):
     selected_hotel_id: str | None = None
     selected_restaurants: list[dict[str, Any]] | None = None
     cost_breakdown: dict[str, Any] | None = None
+    copied_from_shared_id: str | None = None
+    original_creator_username: str | None = None
     created_at: str
     updated_at: str
 

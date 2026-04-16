@@ -4,13 +4,15 @@ import SwiftUI
 
 struct ContentView: View {
     @ObservedObject var authService: AuthService
-    @State private var selectedTab: AppTab = .explore
+    @State private var selectedTab: AppTab = .plan
 
     var body: some View {
         ZStack {
             switch selectedTab {
+            case .plan:
+                PlanTab()
             case .explore:
-                ExploreTab()
+                ExploreFeedView()
             case .trips:
                 SavedTripsTab(selectedTab: $selectedTab)
             case .profile:
@@ -28,7 +30,7 @@ struct ContentView: View {
 
 // MARK: - App Tab
 
-enum AppTab { case explore, trips, profile }
+enum AppTab { case plan, explore, trips, profile }
 
 // MARK: - Floating Tab Bar
 
@@ -36,7 +38,8 @@ private struct FloatingTabBar: View {
     @Binding var selectedTab: AppTab
 
     private let tabs: [(tab: AppTab, icon: String, label: String)] = [
-        (.explore, "globe.americas.fill", "Explore"),
+        (.plan, "globe.americas.fill", "Plan"),
+        (.explore, "square.grid.2x2", "Explore"),
         (.trips, "suitcase.fill", "Trips"),
         (.profile, "person.fill", "Profile"),
     ]
@@ -68,9 +71,9 @@ private struct FloatingTabBar: View {
     }
 }
 
-// MARK: - Explore Tab
+// MARK: - Plan Tab
 
-struct ExploreTab: View {
+struct PlanTab: View {
     @StateObject private var networkMonitor = NetworkMonitor.shared
     @StateObject private var locationManager = LocationManager.shared
     @State private var selectedCity: CityMarker?
@@ -583,7 +586,7 @@ struct SavedTripsTab: View {
         ZStack { DesignTokens.backgroundPrimary.ignoresSafeArea() }
             .onAppear { showTrips = true }
             .sheet(isPresented: $showTrips) {
-                SavedTripsView(onPlanTrip: { selectedTab = .explore })
+                SavedTripsView(onPlanTrip: { selectedTab = .plan })
             }
     }
 }
@@ -591,6 +594,9 @@ struct SavedTripsTab: View {
 struct ProfileTab: View {
     @ObservedObject var authService: AuthService
     @Binding var selectedTab: AppTab
+    @State private var username: String = ""
+    @State private var isEditingUsername: Bool = false
+    @State private var usernameError: String?
 
     var body: some View {
         NavigationStack {
@@ -598,12 +604,45 @@ struct ProfileTab: View {
                 Section {
                     HStack(spacing: 14) {
                         Image(systemName: "person.circle.fill").font(.system(size: 48)).foregroundStyle(DesignTokens.accentCyan)
-                        Text(authService.displayName ?? authService.userId ?? "User").font(.headline).foregroundStyle(DesignTokens.textPrimary)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(authService.displayName ?? authService.userId ?? "User").font(.headline).foregroundStyle(DesignTokens.textPrimary)
+                            if !username.isEmpty {
+                                Text("@\(username)").font(.subheadline).foregroundStyle(DesignTokens.textSecondary)
+                            }
+                        }
                     }
                     .padding(.vertical, 8)
                 }
+                Section("Username") {
+                    if isEditingUsername {
+                        HStack {
+                            TextField("Set username (max 30)", text: $username)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .onChange(of: username) { _, newValue in
+                                    if newValue.count > 30 { username = String(newValue.prefix(30)) }
+                                }
+                            Button("Save") {
+                                isEditingUsername = false
+                            }
+                            .foregroundStyle(DesignTokens.accentCyan)
+                            .disabled(username.trimmingCharacters(in: .whitespaces).isEmpty)
+                        }
+                    } else {
+                        HStack {
+                            Text(username.isEmpty ? "No username set" : "@\(username)")
+                                .foregroundStyle(username.isEmpty ? DesignTokens.textTertiary : DesignTokens.textPrimary)
+                            Spacer()
+                            Button(username.isEmpty ? "Set" : "Edit") { isEditingUsername = true }
+                                .foregroundStyle(DesignTokens.accentCyan)
+                        }
+                    }
+                    if let error = usernameError {
+                        Text(error).font(.caption).foregroundStyle(.red)
+                    }
+                }
                 Section {
-                    NavigationLink { SavedTripsView(onPlanTrip: { selectedTab = .explore }) } label: { Label("Saved Trips", systemImage: "suitcase") }
+                    NavigationLink { SavedTripsView(onPlanTrip: { selectedTab = .plan }) } label: { Label("Saved Trips", systemImage: "suitcase") }
                     Button { selectedTab = .trips } label: { Label("My Trips", systemImage: "map").foregroundStyle(DesignTokens.textPrimary) }
                 }
                 Section {

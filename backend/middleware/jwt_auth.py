@@ -18,6 +18,9 @@ PUBLIC_PATH_PREFIXES = ("/auth", "/share", "/health", "/docs", "/openapi.json", 
 # Specific public paths (not prefix-based)
 PUBLIC_PATHS = {"/search/popular-cities"}
 
+# Prefixes that are public only for GET requests
+PUBLIC_GET_PREFIXES = ("/shared-itineraries",)
+
 
 class JWTAuthMiddleware(BaseHTTPMiddleware):
     """Starlette middleware that enforces JWT Bearer auth.
@@ -35,6 +38,9 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
         if any(path.startswith(prefix) for prefix in PUBLIC_PATH_PREFIXES):
             return await call_next(request)
         if path in PUBLIC_PATHS:
+            return await call_next(request)
+        # Allow GET requests on certain prefixes (e.g. shared-itineraries browsing)
+        if request.method == "GET" and any(path.startswith(prefix) for prefix in PUBLIC_GET_PREFIXES):
             return await call_next(request)
 
         # Extract Authorization header

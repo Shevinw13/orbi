@@ -378,6 +378,8 @@ struct TripResponse: Codable, Identifiable {
     let selectedHotelId: String?
     let selectedRestaurants: [[String: AnyCodableValue]]?
     let costBreakdown: [String: AnyCodableValue]?
+    let copiedFromSharedId: String?
+    let originalCreatorUsername: String?
     let createdAt: String
     let updatedAt: String
 }

@@ -13,6 +13,7 @@ from backend.routes.share import share_write_router, share_read_router
 from backend.routes.search import router as search_router
 from backend.routes.explore import router as explore_router
 from backend.routes.weather import router as weather_router
+from backend.routes.shared_itineraries import router as shared_itineraries_router
 
 app = FastAPI(
     title="Orbi API",
@@ -47,6 +48,7 @@ app.include_router(share_read_router)
 app.include_router(search_router)
 app.include_router(explore_router)
 app.include_router(weather_router)
+app.include_router(shared_itineraries_router)
 
 
 @app.get("/health")

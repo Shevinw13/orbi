@@ -43,6 +43,11 @@
 		A10000036 /* RestaurantSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000036 /* RestaurantSelector.swift */; };
 		A10000037 /* StaysView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000037 /* StaysView.swift */; };
 		A10000038 /* FoodDrinksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000038 /* FoodDrinksView.swift */; };
+		A10000039 /* SharedItineraryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000039 /* SharedItineraryModels.swift */; };
+		A10000040 /* ExploreFeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000040 /* ExploreFeedView.swift */; };
+		A10000041 /* ItineraryCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000041 /* ItineraryCardView.swift */; };
+		A10000042 /* ItineraryDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000042 /* ItineraryDetailView.swift */; };
+		A10000043 /* SharePublishView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000043 /* SharePublishView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -84,6 +89,11 @@
 		B10000036 /* RestaurantSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestaurantSelector.swift; sourceTree = "<group>"; };
 		B10000037 /* StaysView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StaysView.swift; sourceTree = "<group>"; };
 		B10000038 /* FoodDrinksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoodDrinksView.swift; sourceTree = "<group>"; };
+		B10000039 /* SharedItineraryModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedItineraryModels.swift; sourceTree = "<group>"; };
+		B10000040 /* ExploreFeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExploreFeedView.swift; sourceTree = "<group>"; };
+		B10000041 /* ItineraryCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItineraryCardView.swift; sourceTree = "<group>"; };
+		B10000042 /* ItineraryDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItineraryDetailView.swift; sourceTree = "<group>"; };
+		B10000043 /* SharePublishView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharePublishView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -142,6 +152,10 @@
 				B10000036 /* RestaurantSelector.swift */,
 				B10000037 /* StaysView.swift */,
 				B10000038 /* FoodDrinksView.swift */,
+				B10000040 /* ExploreFeedView.swift */,
+				B10000041 /* ItineraryCardView.swift */,
+				B10000042 /* ItineraryDetailView.swift */,
+				B10000043 /* SharePublishView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -152,6 +166,7 @@
 				B10000014 /* AuthModels.swift */,
 				B10000015 /* DestinationModels.swift */,
 				B10000016 /* TripModels.swift */,
+				B10000039 /* SharedItineraryModels.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -293,6 +308,11 @@
 				A10000036 /* RestaurantSelector.swift in Sources */,
 				A10000037 /* StaysView.swift in Sources */,
 				A10000038 /* FoodDrinksView.swift in Sources */,
+				A10000039 /* SharedItineraryModels.swift in Sources */,
+				A10000040 /* ExploreFeedView.swift in Sources */,
+				A10000041 /* ItineraryCardView.swift in Sources */,
+				A10000042 /* ItineraryDetailView.swift in Sources */,
+				A10000043 /* SharePublishView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

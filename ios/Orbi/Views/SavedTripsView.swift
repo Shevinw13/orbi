@@ -228,6 +228,7 @@ struct SavedTripDetailView: View {
 
     let trip: TripResponse
     @Environment(\.dismiss) private var dismiss
+    @State private var showSharePublish: Bool = false
 
     private var decodedItinerary: ItineraryResponse? {
         guard let dict = trip.itinerary else { return nil }
@@ -265,6 +266,17 @@ struct SavedTripDetailView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }.foregroundStyle(DesignTokens.textPrimary)
                 }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showSharePublish = true
+                    } label: {
+                        Label("Share to Explore", systemImage: "square.and.arrow.up")
+                    }
+                    .foregroundStyle(DesignTokens.accentCyan)
+                }
+            }
+            .sheet(isPresented: $showSharePublish) {
+                SharePublishView(tripId: trip.id, tripDestination: trip.destination)
             }
         }
     }
@@ -280,6 +292,11 @@ struct SavedTripDetailView: View {
             }
             .font(.subheadline)
             .foregroundStyle(DesignTokens.textSecondary)
+            if let creator = trip.originalCreatorUsername, !creator.isEmpty {
+                Label("Originally by \(creator)", systemImage: "person.circle")
+                    .font(.caption)
+                    .foregroundStyle(DesignTokens.accentCyan)
+            }
         }
         .padding(DesignTokens.spacingMD)
     }
