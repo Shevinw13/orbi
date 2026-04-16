@@ -43,7 +43,7 @@ final class SharePublishViewModel: ObservableObject {
                 budgetLevel: budgetLevel,
                 tags: selectedTags.isEmpty ? [] : Array(selectedTags)
             )
-            let _: [String: AnyCodableValue] = try await APIClient.shared.request(
+            try await APIClient.shared.requestVoid(
                 .post, path: "/shared-itineraries", body: request
             )
             didPublish = true
