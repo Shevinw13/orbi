@@ -116,10 +116,10 @@ Vibes: {vibes_str}
 {family_note}
 
 RULES:
-- Each day has 3 time blocks: Morning, Afternoon, Evening.
-- Each time block MUST have at least 1 activity (not counting meals). Generate 2-3 activities per day minimum.
-- Each day MUST also include 3 meals: Breakfast (Morning), Lunch (Afternoon), Dinner (Evening).
-- Total items per day should be 5-6 (2-3 activities + 3 meals).
+- Each day has exactly 3 time blocks: Morning, Afternoon, Evening.
+- MANDATORY: Each time block (Morning, Afternoon, Evening) MUST contain EXACTLY 1 activity. Use time_slot values "Morning", "Afternoon", or "Evening" for each activity.
+- MANDATORY: Each day MUST contain EXACTLY 3 meals: Breakfast (in Morning block), Lunch (in Afternoon block), Dinner (in Evening block).
+- This means each day has a MINIMUM of 6 items: 3 activities + 3 meals.
 - For Breakfast: Include a highly-rated breakfast spot known for morning dining.
 - For Lunch: Include a popular lunch restaurant with good midday options.
 - For Dinner: Include a top-rated dinner restaurant with evening ambiance.
@@ -127,6 +127,7 @@ RULES:
 - Costs should match the {tier_label} budget tier.
 - All locations must be real places in {request.destination} with accurate coordinates.
 - Travel time between consecutive items should be under {MAX_TRAVEL_TIME_MIN} minutes.
+- Do NOT skip any time block. Every day must have Morning, Afternoon, and Evening activities.
 
 Return ONLY valid JSON with this exact structure:
 {{

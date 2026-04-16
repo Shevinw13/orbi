@@ -106,6 +106,7 @@ async def _search_foursquare(
 ) -> list[PlaceResult]:
     """Search Foursquare Places API as secondary fallback."""
     if not settings.foursquare_api_key:
+        logger.debug("Foursquare API key not set, skipping")
         return []
 
     category_map = {
@@ -177,6 +178,10 @@ async def _search_openai(
         f"name, latitude, longitude, price_level (as dollar signs)."
     )
 
+    if not settings.openai_api_key:
+        logger.warning("OpenAI API key not configured for place generation")
+        return []
+
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
@@ -199,13 +204,25 @@ async def _search_openai(
             )
             resp.raise_for_status()
 
-        content = resp.json()["choices"][0]["message"]["content"].strip()
+        raw_body = resp.json()
+        choices = raw_body.get("choices", [])
+        if not choices:
+            logger.warning("OpenAI returned no choices for place generation")
+            return []
+
+        content = choices[0]["message"]["content"].strip()
+        logger.debug("OpenAI place response content: %s", content[:500])
+
         if content.startswith("```"):
             content = content.split("\n", 1)[1] if "\n" in content else content[3:]
             if content.endswith("```"):
                 content = content[:-3]
 
         items = json.loads(content)
+        if not isinstance(items, list):
+            logger.warning("OpenAI place response is not a list: %s", type(items))
+            return []
+
         results: list[PlaceResult] = []
         for item in items[:TOP_N]:
             results.append(
@@ -221,8 +238,14 @@ async def _search_openai(
             )
         return results
 
+    except json.JSONDecodeError as exc:
+        logger.warning("OpenAI place generation returned invalid JSON: %s", exc)
+        return []
+    except httpx.HTTPStatusError as exc:
+        logger.warning("OpenAI place generation HTTP error %s: %s", exc.response.status_code, exc)
+        return []
     except Exception as exc:
-        logger.warning("OpenAI place generation failed: %s", exc)
+        logger.warning("OpenAI place generation failed: %s", exc, exc_info=True)
         return []
 
 
@@ -246,6 +269,10 @@ async def _search_places(
     # 1. Try Google Places (primary)
     if settings.google_places_api_key:
         try:
+            logger.info(
+                "Searching Google Places: type=%s, lat=%s, lng=%s, radius=%s, budget=%s",
+                google_type, query.latitude, query.longitude, query.radius, query.price_range,
+            )
             google_results = await google_search(
                 place_type=google_type,
                 latitude=query.latitude,
@@ -254,23 +281,42 @@ async def _search_places(
                 budget_tier=query.price_range,
                 keyword=query.cuisine or query.vibe,
             )
+            logger.info("Google Places returned %d results", len(google_results))
             results = [
                 r for r in [_google_to_place_result(g) for g in google_results]
                 if r.place_id not in query.excluded_ids
             ][:TOP_N]
         except Exception as exc:
-            logger.warning("Google Places failed, trying Foursquare: %s", exc)
+            logger.warning("Google Places failed, trying Foursquare: %s", exc, exc_info=True)
+    else:
+        logger.warning("Google Places API key not configured, skipping Google source")
 
     # 2. Fallback to Foursquare (secondary)
     if not results:
+        if settings.foursquare_api_key:
+            logger.info("Google returned no results, trying Foursquare fallback")
+        else:
+            logger.warning("Foursquare API key not configured, skipping Foursquare source")
         results = await _search_foursquare(place_type, query)
+        if results:
+            logger.info("Foursquare returned %d results", len(results))
 
     # 3. Fallback to OpenAI (tertiary)
     if not results:
+        if settings.openai_api_key:
+            logger.info("No results from Google/Foursquare, trying OpenAI fallback")
+        else:
+            logger.warning("OpenAI API key not configured, skipping OpenAI source")
         results = await _search_openai(place_type, query)
+        if results:
+            logger.info("OpenAI returned %d results", len(results))
 
     # 4. All sources failed
     if not results:
+        logger.warning(
+            "All place sources returned empty for type=%s, lat=%s, lng=%s",
+            place_type, query.latitude, query.longitude,
+        )
         filters_broadened = True
 
     response = PlacesResponse(results=results, filters_broadened=filters_broadened)
