@@ -314,16 +314,10 @@ async def generate_itinerary(request: ItineraryRequest) -> ItineraryResponse:
 
     itinerary = _parse_itinerary_response(raw_json, request)
 
-    # Validate: each day must have 3 time blocks with activities + 3 meals
-    # If OpenAI didn't follow instructions, retry once without cache
+    # Validate: each day should have activities + meals
+    # If OpenAI didn't follow instructions, log but don't retry (too slow)
     if not _validate_itinerary(itinerary, request.num_days):
-        logger.warning("Generated itinerary failed validation, retrying...")
-        try:
-            raw_json = await _call_openai(prompt)
-            itinerary = _parse_itinerary_response(raw_json, request)
-        except Exception as exc:
-            logger.error("OpenAI retry failed: %s", exc)
-            # Use the first attempt even if imperfect
+        logger.warning("Generated itinerary has gaps (missing time blocks or meals), using as-is")
 
     # Cache the result
     set_cached(cache_key, itinerary.model_dump(), ttl=CACHE_TTL)
