@@ -56,6 +56,14 @@ struct ItineraryDetailView: View {
     private var decodedItinerary: ItineraryResponse? {
         guard let dict = viewModel.detail?.itinerary else { return nil }
         guard let data = try? JSONEncoder().encode(dict) else { return nil }
+        // The stored itinerary was encoded with convertToSnakeCase from Swift,
+        // so use convertFromSnakeCase to decode it back
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        if let result = try? decoder.decode(ItineraryResponse.self, from: data) {
+            return result
+        }
+        // Fallback: try without snake_case conversion (in case it was stored as camelCase)
         return try? JSONDecoder().decode(ItineraryResponse.self, from: data)
     }
 
@@ -198,12 +206,28 @@ struct ItineraryDetailView: View {
             .padding(.vertical, DesignTokens.spacingSM)
             .background(DesignTokens.backgroundSecondary)
 
-            ForEach(Array(day.slots.enumerated()), id: \.element.id) { index, slot in
-                detailSlotCard(slot: slot, isLast: index == day.slots.count - 1)
-            }
+            // Use time block ordering: Morning → Afternoon → Evening, activities before meals
+            let items = day.timeBlockItems
+            let blocks = ["Morning", "Afternoon", "Evening"]
+            ForEach(blocks, id: \.self) { block in
+                let blockItems = items.filter { $0.timeBlock == block }
+                if !blockItems.isEmpty {
+                    Text(block)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(timeSlotColor(block))
+                        .padding(.horizontal, DesignTokens.spacingMD)
+                        .padding(.top, DesignTokens.spacingSM)
+                        .padding(.bottom, DesignTokens.spacingXS)
 
-            ForEach(day.meals) { meal in
-                detailMealRow(meal: meal)
+                    ForEach(Array(blockItems.enumerated()), id: \.element.id) { index, item in
+                        switch item {
+                        case .activity(let slot):
+                            detailSlotCard(slot: slot, isLast: index == blockItems.count - 1)
+                        case .meal(let meal):
+                            detailMealRow(meal: meal)
+                        }
+                    }
+                }
             }
         }
     }

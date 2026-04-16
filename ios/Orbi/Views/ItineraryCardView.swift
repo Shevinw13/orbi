@@ -54,6 +54,10 @@ struct ItineraryCardView: View {
                             .fontWeight(.semibold)
                             .foregroundStyle(.orange)
                         Spacer()
+                        if let username = card.creatorUsername, !username.isEmpty {
+                            Text("@\(username)")
+                                .foregroundStyle(.white.opacity(0.7))
+                        }
                         HStack(spacing: 2) {
                             Image(systemName: "bookmark.fill")
                             Text("\(card.saveCount)")
