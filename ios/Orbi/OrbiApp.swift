@@ -6,7 +6,7 @@ import MapKit
 struct OrbiApp: App {
 
     @StateObject private var authService = AuthService.shared
-    @State private var sharedTripId: String?
+    @State private var sharedTripId: ShareId?
 
     var body: some Scene {
         WindowGroup {
@@ -25,22 +25,22 @@ struct OrbiApp: App {
                 handleDeepLink(url)
             }
             .sheet(item: $sharedTripId) { shareId in
-                SharedTripView(shareId: shareId)
+                SharedTripView(shareId: shareId.value)
             }
         }
     }
 
     private func handleDeepLink(_ url: URL) {
         let pathComponents = url.pathComponents
-        // Look for /share/{id} pattern
         if let shareIndex = pathComponents.firstIndex(of: "share"),
            shareIndex + 1 < pathComponents.count {
-            sharedTripId = pathComponents[shareIndex + 1]
+            sharedTripId = ShareId(value: pathComponents[shareIndex + 1])
         }
     }
 }
 
-// Make String identifiable for sheet binding
-extension String: @retroactive Identifiable {
-    public var id: String { self }
+// Wrapper to avoid retroactive Identifiable on String
+struct ShareId: Identifiable {
+    let value: String
+    var id: String { value }
 }
