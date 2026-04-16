@@ -41,6 +41,8 @@
 		A10000034 /* PriceFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000034 /* PriceFormatter.swift */; };
 		A10000035 /* ExternalLinkButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000035 /* ExternalLinkButton.swift */; };
 		A10000036 /* RestaurantSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000036 /* RestaurantSelector.swift */; };
+		A10000037 /* StaysView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000037 /* StaysView.swift */; };
+		A10000038 /* FoodDrinksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000038 /* FoodDrinksView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -80,6 +82,8 @@
 		B10000034 /* PriceFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PriceFormatter.swift; sourceTree = "<group>"; };
 		B10000035 /* ExternalLinkButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExternalLinkButton.swift; sourceTree = "<group>"; };
 		B10000036 /* RestaurantSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestaurantSelector.swift; sourceTree = "<group>"; };
+		B10000037 /* StaysView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StaysView.swift; sourceTree = "<group>"; };
+		B10000038 /* FoodDrinksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoodDrinksView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -136,6 +140,8 @@
 				B10000033 /* ShareSheetView.swift */,
 				B10000035 /* ExternalLinkButton.swift */,
 				B10000036 /* RestaurantSelector.swift */,
+				B10000037 /* StaysView.swift */,
+				B10000038 /* FoodDrinksView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -285,6 +291,8 @@
 				A10000034 /* PriceFormatter.swift in Sources */,
 				A10000035 /* ExternalLinkButton.swift in Sources */,
 				A10000036 /* RestaurantSelector.swift in Sources */,
+				A10000037 /* StaysView.swift in Sources */,
+				A10000038 /* FoodDrinksView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

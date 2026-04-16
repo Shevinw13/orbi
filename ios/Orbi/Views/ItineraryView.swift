@@ -4,8 +4,6 @@ import MapKit
 
 // MARK: - Itinerary ViewModel
 
-/// Manages itinerary state, drag-and-drop reordering, and item CRUD operations.
-/// Validates: Requirements 5.1, 5.3, 5.4, 5.5, 5.6, 5.7, 8.5, 15.4
 @MainActor
 final class ItineraryViewModel: ObservableObject {
 
@@ -17,30 +15,30 @@ final class ItineraryViewModel: ObservableObject {
     @Published var isReplacing: Bool = false
     @Published var errorMessage: String?
     @Published var estimatedCost: CostBreakdown?
+    @Published var replaceSuggestions: [ItinerarySlot] = []
+    @Published var mealReplaceSuggestions: [MealSlot] = []
+    @Published var showReplaceSuggestions: Bool = false
+    @Published var replaceTargetDay: Int = 0
+    @Published var replaceTargetSlot: ItinerarySlot?
+    @Published var replaceTargetMeal: MealSlot?
 
-    /// Tracks the slot currently being dragged for reorder.
     @Published var draggingSlot: ItinerarySlot?
     @Published var draggingFromDay: Int?
 
-    /// Guards against double-firing haptic feedback (Req 16.4)
     private var didFireReplaceHaptic: Bool = false
 
     init(itinerary: ItineraryResponse) {
         self.itinerary = itinerary
-        // Auto-optimize days with ≥3 activities on load (Req 7.1)
         autoOptimizeAllDays()
     }
 
-    // MARK: - Auto-Optimization (Req 7.1)
-
-    /// Automatically optimizes all days with ≥3 slots using nearest-neighbor.
     private func autoOptimizeAllDays() {
         for day in itinerary.days where day.slots.count >= 3 {
             optimizeDay(day.dayNumber)
         }
     }
 
-    // MARK: - Reorder within day (Req 5.3)
+    // MARK: - Reorder
 
     func moveSlot(in dayNumber: Int, from source: IndexSet, to destination: Int) {
         guard let dayIndex = itinerary.days.firstIndex(where: { $0.dayNumber == dayNumber }) else { return }
@@ -48,20 +46,17 @@ final class ItineraryViewModel: ObservableObject {
         recalculateCost()
     }
 
-    // MARK: - Cross-day move (Req 5.4)
-
     func moveSlotToDay(_ slot: ItinerarySlot, fromDay: Int, toDay: Int) {
         guard fromDay != toDay else { return }
         guard let fromIndex = itinerary.days.firstIndex(where: { $0.dayNumber == fromDay }),
               let toIndex = itinerary.days.firstIndex(where: { $0.dayNumber == toDay }) else { return }
         guard let slotIndex = itinerary.days[fromIndex].slots.firstIndex(where: { $0 == slot }) else { return }
-
         let movedSlot = itinerary.days[fromIndex].slots.remove(at: slotIndex)
         itinerary.days[toIndex].slots.append(movedSlot)
         recalculateCost()
     }
 
-    // MARK: - Replace activity (Req 5.5)
+    // MARK: - Replace activity (shows 3-5 suggestions)
 
     func replaceActivity(dayNumber: Int, slot: ItinerarySlot) async {
         isReplacing = true
@@ -69,8 +64,6 @@ final class ItineraryViewModel: ObservableObject {
         didFireReplaceHaptic = false
 
         let allActivities = itinerary.days.flatMap { $0.slots.map(\.activityName) }
-
-        // Build adjacent activity coordinates (Req 11.1–11.4)
         var adjacentCoords: [[String: Double]]?
         if let day = itinerary.days.first(where: { $0.dayNumber == dayNumber }),
            let slotIndex = day.slots.firstIndex(where: { $0 == slot }) {
@@ -83,31 +76,31 @@ final class ItineraryViewModel: ObservableObject {
                 let next = day.slots[slotIndex + 1]
                 coords.append(["lat": next.latitude, "lng": next.longitude])
             }
-            if !coords.isEmpty {
-                adjacentCoords = coords
-            }
+            if !coords.isEmpty { adjacentCoords = coords }
         }
 
         let request = ReplaceActivityRequest(
             destination: itinerary.destination,
             dayNumber: dayNumber,
             timeSlot: slot.timeSlot,
-            currentActivityName: slot.activityName,
+            itemType: "activity",
+            currentItemName: slot.activityName,
             existingActivities: allActivities,
-            vibe: itinerary.vibe,
-            adjacentActivityCoords: adjacentCoords
+            vibes: itinerary.vibes,
+            budgetTier: itinerary.budgetTier,
+            adjacentActivityCoords: adjacentCoords,
+            numSuggestions: 5
         )
 
         do {
-            let newSlot: ItinerarySlot = try await APIClient.shared.request(
+            let response: ReplaceSuggestionsResponse = try await APIClient.shared.request(
                 .post, path: "/trips/replace-item", body: request
             )
-            if let dayIndex = itinerary.days.firstIndex(where: { $0.dayNumber == dayNumber }),
-               let slotIndex = itinerary.days[dayIndex].slots.firstIndex(where: { $0 == slot }) {
-                itinerary.days[dayIndex].slots[slotIndex] = newSlot
-            }
-            recalculateCost()
-            // Haptic feedback on successful activity replacement (Req 16.3)
+            replaceSuggestions = response.suggestions
+            replaceTargetDay = dayNumber
+            replaceTargetSlot = slot
+            replaceTargetMeal = nil
+            showReplaceSuggestions = true
             if !didFireReplaceHaptic {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 didFireReplaceHaptic = true
@@ -115,17 +108,86 @@ final class ItineraryViewModel: ObservableObject {
         } catch let error as APIError {
             errorMessage = error.errorDescription
         } catch {
-            errorMessage = "Failed to replace activity. Please try again."
+            errorMessage = "Failed to get suggestions. Please try again."
         }
-
         isReplacing = false
     }
 
-    // MARK: - Add custom activity (Req 5.6)
+    func selectReplacement(_ newSlot: ItinerarySlot) {
+        guard let targetSlot = replaceTargetSlot,
+              let dayIndex = itinerary.days.firstIndex(where: { $0.dayNumber == replaceTargetDay }),
+              let slotIndex = itinerary.days[dayIndex].slots.firstIndex(where: { $0 == targetSlot }) else { return }
+        itinerary.days[dayIndex].slots[slotIndex] = newSlot
+        showReplaceSuggestions = false
+        replaceSuggestions = []
+        replaceTargetSlot = nil
+        recalculateCost()
+    }
+
+    // MARK: - Replace meal (shows 3-5 suggestions)
+
+    func replaceMeal(dayNumber: Int, meal: MealSlot) async {
+        isReplacing = true
+        errorMessage = nil
+
+        let allMeals = itinerary.days.flatMap { $0.meals.map(\.restaurantName) }
+
+        let request = ReplaceActivityRequest(
+            destination: itinerary.destination,
+            dayNumber: dayNumber,
+            timeSlot: meal.mealType == "Breakfast" ? "Morning" : meal.mealType == "Lunch" ? "Afternoon" : "Evening",
+            itemType: "meal",
+            currentItemName: meal.restaurantName,
+            existingActivities: allMeals,
+            vibes: itinerary.vibes,
+            budgetTier: itinerary.budgetTier,
+            adjacentActivityCoords: nil,
+            numSuggestions: 5
+        )
+
+        do {
+            // Try to decode as meal suggestions first, fall back to activity suggestions
+            let response: ReplaceSuggestionsResponse = try await APIClient.shared.request(
+                .post, path: "/trips/replace-item", body: request
+            )
+            // Convert activity slots to meal slots for display
+            mealReplaceSuggestions = response.suggestions.map { slot in
+                MealSlot(
+                    mealType: meal.mealType,
+                    restaurantName: slot.activityName,
+                    cuisine: "",
+                    priceLevel: itinerary.budgetTier,
+                    latitude: slot.latitude,
+                    longitude: slot.longitude,
+                    estimatedCostUsd: slot.estimatedCostUsd,
+                    isEstimated: true
+                )
+            }
+            replaceTargetDay = dayNumber
+            replaceTargetMeal = meal
+            replaceTargetSlot = nil
+            showReplaceSuggestions = true
+        } catch {
+            errorMessage = "Failed to get meal suggestions."
+        }
+        isReplacing = false
+    }
+
+    func selectMealReplacement(_ newMeal: MealSlot) {
+        guard let targetMeal = replaceTargetMeal,
+              let dayIndex = itinerary.days.firstIndex(where: { $0.dayNumber == replaceTargetDay }),
+              let mealIndex = itinerary.days[dayIndex].meals.firstIndex(where: { $0 == targetMeal }) else { return }
+        itinerary.days[dayIndex].meals[mealIndex] = newMeal
+        showReplaceSuggestions = false
+        mealReplaceSuggestions = []
+        replaceTargetMeal = nil
+        recalculateCost()
+    }
+
+    // MARK: - Add / Remove
 
     func addActivity(to dayNumber: Int, name: String, description: String, durationMin: Int) {
         guard let dayIndex = itinerary.days.firstIndex(where: { $0.dayNumber == dayNumber }) else { return }
-
         let newSlot = ItinerarySlot(
             timeSlot: "Custom",
             activityName: name,
@@ -140,22 +202,41 @@ final class ItineraryViewModel: ObservableObject {
         recalculateCost()
     }
 
-    // MARK: - Remove activity (Req 5.7)
-
     func removeActivity(from dayNumber: Int, slot: ItinerarySlot) {
         guard let dayIndex = itinerary.days.firstIndex(where: { $0.dayNumber == dayNumber }) else { return }
         itinerary.days[dayIndex].slots.removeAll { $0 == slot }
         recalculateCost()
     }
 
-    // MARK: - Optimize Day (Req 7.1, 7.2, 7.3, 7.4, 7.5)
+    func addMeal(to dayNumber: Int, mealType: String) {
+        guard let dayIndex = itinerary.days.firstIndex(where: { $0.dayNumber == dayNumber }) else { return }
+        let newMeal = MealSlot(
+            mealType: mealType,
+            restaurantName: "Choose a restaurant",
+            cuisine: "",
+            priceLevel: itinerary.budgetTier,
+            latitude: 0,
+            longitude: 0,
+            estimatedCostUsd: 0,
+            isEstimated: true
+        )
+        itinerary.days[dayIndex].meals.append(newMeal)
+        recalculateCost()
+    }
+
+    func removeMeal(from dayNumber: Int, meal: MealSlot) {
+        guard let dayIndex = itinerary.days.firstIndex(where: { $0.dayNumber == dayNumber }) else { return }
+        itinerary.days[dayIndex].meals.removeAll { $0 == meal }
+        recalculateCost()
+    }
+
+    // MARK: - Optimize Day
 
     func optimizeDay(_ dayNumber: Int) {
         guard let dayIndex = itinerary.days.firstIndex(where: { $0.dayNumber == dayNumber }) else { return }
         var slots = itinerary.days[dayIndex].slots
         guard slots.count >= 3 else { return }
 
-        // Nearest-neighbor algorithm on haversine distance
         var remaining = Array(slots.dropFirst())
         var ordered = [slots[0]]
 
@@ -179,8 +260,6 @@ final class ItineraryViewModel: ObservableObject {
         withAnimation(.easeInOut(duration: 0.3)) {
             itinerary.days[dayIndex].slots = ordered
         }
-
-        // Recalculate travel times between consecutive activities
         recalculateTravelTimes(for: dayIndex)
         recalculateCost()
     }
@@ -193,7 +272,6 @@ final class ItineraryViewModel: ObservableObject {
                     lat1: slots[i].latitude, lon1: slots[i].longitude,
                     lat2: slots[i + 1].latitude, lon2: slots[i + 1].longitude
                 )
-                // Rough estimate: walking ~5 km/h
                 let travelMin = max(5, Int(dist / 5000.0 * 60.0))
                 itinerary.days[dayIndex].slots[i].travelTimeToNextMin = travelMin
             } else {
@@ -203,7 +281,7 @@ final class ItineraryViewModel: ObservableObject {
     }
 
     private func haversineDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double) -> Double {
-        let R = 6371000.0 // Earth radius in meters
+        let R = 6371000.0
         let dLat = (lat2 - lat1) * .pi / 180.0
         let dLon = (lon2 - lon1) * .pi / 180.0
         let a = sin(dLat / 2) * sin(dLat / 2) +
@@ -213,13 +291,9 @@ final class ItineraryViewModel: ObservableObject {
         return R * c
     }
 
-    // MARK: - Open in Apple Maps (Req 8.1, 8.2)
-
-    /// Opens Apple Maps with walking directions through all activity waypoints for the given day.
     func openInAppleMaps(day: ItineraryDay) {
         let validSlots = day.slots.filter { $0.latitude != 0 || $0.longitude != 0 }
         guard !validSlots.isEmpty else { return }
-
         let mapItems = validSlots.map { slot -> MKMapItem in
             let coordinate = CLLocationCoordinate2D(latitude: slot.latitude, longitude: slot.longitude)
             let placemark = MKPlacemark(coordinate: coordinate)
@@ -227,42 +301,41 @@ final class ItineraryViewModel: ObservableObject {
             item.name = slot.activityName
             return item
         }
-
-        let launchOptions: [String: Any] = [
+        MKMapItem.openMaps(with: mapItems, launchOptions: [
             MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeWalking
-        ]
-        MKMapItem.openMaps(with: mapItems, launchOptions: launchOptions)
+        ])
     }
-
-    // MARK: - Cost recalculation (Req 8.5)
 
     func recalculateCost() {
         var activitiesTotal = 0.0
+        var foodTotal = 0.0
         for day in itinerary.days {
             for slot in day.slots {
                 activitiesTotal += slot.estimatedCostUsd ?? 0
             }
+            for meal in day.meals {
+                foodTotal += meal.estimatedCostUsd ?? 0
+            }
         }
         let perDay = itinerary.days.map { day in
             let dayActivities = day.slots.reduce(0.0) { $0 + ($1.estimatedCostUsd ?? 0) }
-            return DayCost(day: day.dayNumber, hotel: 0, food: 0, activities: dayActivities, subtotal: dayActivities)
+            let dayFood = day.meals.reduce(0.0) { $0 + ($1.estimatedCostUsd ?? 0) }
+            return DayCost(day: day.dayNumber, hotel: 0, hotelIsEstimated: true, food: dayFood, foodIsEstimated: true, activities: dayActivities, subtotal: dayActivities + dayFood)
         }
         estimatedCost = CostBreakdown(
             hotelTotal: 0,
-            foodTotal: 0,
+            hotelIsEstimated: true,
+            foodTotal: foodTotal,
+            foodIsEstimated: true,
             activitiesTotal: activitiesTotal,
-            total: activitiesTotal,
+            total: activitiesTotal + foodTotal,
             perDay: perDay
         )
     }
 }
 
-
-
 // MARK: - Day Selector View
 
-/// Horizontal scrollable row of pill buttons for day navigation.
-/// Validates: Requirements 8.2, 8.3
 struct DaySelectorView: View {
     let days: [ItineraryDay]
     @Binding var selectedDay: Int
@@ -307,11 +380,8 @@ struct DaySelectorView: View {
     }
 }
 
+// MARK: - Itinerary View (standalone)
 
-// MARK: - Itinerary View (Req 5.1, 15.4)
-
-/// Vertical timeline grouped by day with interactive itinerary items.
-/// Validates: Requirements 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 8.5, 15.4
 struct ItineraryView: View {
 
     @StateObject private var viewModel: ItineraryViewModel
@@ -328,16 +398,14 @@ struct ItineraryView: View {
                 DesignTokens.backgroundPrimary.ignoresSafeArea()
 
                 VStack(spacing: 0) {
-                    // Day selector
                     DaySelectorView(days: viewModel.itinerary.days, selectedDay: $selectedDay)
 
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0) {
-                            // "Why This Plan" reasoning card (Req 9.1, 9.2)
                             whyThisPlanCard
 
                             if let day = viewModel.itinerary.days.first(where: { $0.dayNumber == selectedDay }) {
-                                daySectionView(day: day)
+                                InlineDaySectionView(day: day, viewModel: viewModel)
                             }
                         }
                         .padding(.bottom, 24)
@@ -368,6 +436,9 @@ struct ItineraryView: View {
                     viewModel.addActivity(to: viewModel.addActivityDayNumber, name: name, description: desc, durationMin: duration)
                 }
             }
+            .sheet(isPresented: $viewModel.showReplaceSuggestions) {
+                replaceSuggestionsSheet
+            }
             .alert("Error", isPresented: .constant(viewModel.errorMessage != nil)) {
                 Button("OK") { viewModel.errorMessage = nil }
             } message: {
@@ -379,21 +450,16 @@ struct ItineraryView: View {
         }
     }
 
-
-    // MARK: - Why This Plan Card (Req 9.1, 9.2)
-
     private var whyThisPlanCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             Label("Why This Plan", systemImage: "lightbulb.fill")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(DesignTokens.accentCyan)
-
             if let reasoning = viewModel.itinerary.reasoningText, !reasoning.isEmpty {
                 Text(reasoning)
                     .font(.caption)
                     .foregroundStyle(DesignTokens.textPrimary)
             }
-
             Text("Optimized for minimal travel time and best experience flow")
                 .font(.caption2)
                 .foregroundStyle(DesignTokens.textSecondary)
@@ -407,293 +473,73 @@ struct ItineraryView: View {
         .accessibilityLabel("Why This Plan")
     }
 
-
-    // MARK: - Day Section
-
-    private func daySectionView(day: ItineraryDay) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            daySectionHeader(day: day)
-                .onDrop(of: [.text], isTargeted: nil) { providers in
-                    handleCrossDayDrop(providers: providers, targetDay: day.dayNumber)
-                }
-
-            // Timeline bar (Req 8.1, 8.2, 8.3, 8.4)
-            TimelineBarView(day: day) { _ in
-                // Scroll handled by parent ScrollView
-            }
-
-            ForEach(Array(day.slots.enumerated()), id: \.element.id) { index, slot in
-                slotRow(slot: slot, dayNumber: day.dayNumber, isLast: index == day.slots.count - 1)
-            }
-            .onMove { source, destination in
-                viewModel.moveSlot(in: day.dayNumber, from: source, to: destination)
-            }
-
-            if let restaurant = day.restaurant {
-                restaurantRow(restaurant: restaurant)
-            }
-
-            addActivityButton(dayNumber: day.dayNumber)
-        }
-    }
-
-    private func daySectionHeader(day: ItineraryDay) -> some View {
-        HStack {
-            Image(systemName: "calendar")
-                .foregroundStyle(DesignTokens.accentCyan)
-            Text("Day \(day.dayNumber)")
-                .font(.title3.weight(.bold))
-                .foregroundStyle(DesignTokens.textPrimary)
-            Spacer()
-            // Open in Apple Maps button (Req 8.1, 8.2)
-            Button {
-                viewModel.openInAppleMaps(day: day)
-            } label: {
-                Label("Apple Maps", systemImage: "map.fill")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(DesignTokens.accentCyan)
-            }
-            .disabled(day.slots.isEmpty)
-            .opacity(day.slots.isEmpty ? 0.4 : 1.0)
-            .accessibilityLabel("Open Day \(day.dayNumber) in Apple Maps")
-            Text("\(day.slots.count) activities")
-                .font(.caption)
-                .foregroundStyle(DesignTokens.textSecondary)
-        }
-        .padding(.horizontal, DesignTokens.spacingMD)
-        .padding(.vertical, DesignTokens.spacingSM)
-        .background(DesignTokens.backgroundSecondary)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Day \(day.dayNumber), \(day.slots.count) activities")
-    }
-
-    // MARK: - Slot Row
-
-    private func slotRow(slot: ItinerarySlot, dayNumber: Int, isLast: Bool) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(spacing: 0) {
-                Circle()
-                    .fill(timeSlotColor(slot.timeSlot))
-                    .frame(width: 12, height: 12)
-                if !isLast {
-                    Rectangle()
-                        .fill(DesignTokens.surfaceGlassBorder)
-                        .frame(width: 2)
-                        .frame(maxHeight: .infinity)
-                }
-            }
-            .frame(width: 12)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(slot.timeSlot)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(timeSlotColor(slot.timeSlot))
-                Text(slot.activityName)
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(DesignTokens.textPrimary)
-                if let tag = slot.tag, !tag.isEmpty {
-                    Text(tag)
-                        .font(.caption2)
-                        .foregroundStyle(DesignTokens.accentCyan)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 2)
-                        .background(
-                            Capsule()
-                                .fill(DesignTokens.accentCyan.opacity(0.2))
-                        )
-                }
-                Text(slot.description)
-                    .font(.caption)
-                    .foregroundStyle(DesignTokens.textSecondary)
-                    .lineLimit(2)
-
-                HStack(spacing: 12) {
-                    Label("\(slot.estimatedDurationMin) min", systemImage: "clock")
-                    if let cost = slot.estimatedCostUsd, cost > 0 {
-                        Label("$\(Int(cost))", systemImage: "dollarsign.circle")
-                    }
-                    if let travel = slot.travelTimeToNextMin, travel > 0 {
-                        Label("\(travel) min travel", systemImage: "car")
+    @ViewBuilder
+    private var replaceSuggestionsSheet: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: DesignTokens.spacingSM) {
+                    if viewModel.replaceTargetSlot != nil {
+                        ForEach(viewModel.replaceSuggestions) { suggestion in
+                            Button {
+                                viewModel.selectReplacement(suggestion)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(suggestion.activityName)
+                                        .font(.body.weight(.medium))
+                                        .foregroundStyle(DesignTokens.textPrimary)
+                                    Text(suggestion.description)
+                                        .font(.caption)
+                                        .foregroundStyle(DesignTokens.textSecondary)
+                                        .lineLimit(2)
+                                    HStack(spacing: 8) {
+                                        if let cost = suggestion.estimatedCostUsd, cost > 0 {
+                                            Text("~$\(Int(cost))")
+                                        }
+                                        Text("\(suggestion.estimatedDurationMin) min")
+                                    }
+                                    .font(.caption2)
+                                    .foregroundStyle(DesignTokens.textTertiary)
+                                }
+                                .padding(DesignTokens.spacingSM)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .glassmorphic(cornerRadius: DesignTokens.radiusMD)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    } else if viewModel.replaceTargetMeal != nil {
+                        ForEach(viewModel.mealReplaceSuggestions) { suggestion in
+                            Button {
+                                viewModel.selectMealReplacement(suggestion)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(suggestion.restaurantName)
+                                        .font(.body.weight(.medium))
+                                        .foregroundStyle(DesignTokens.textPrimary)
+                                    HStack(spacing: 8) {
+                                        Text(suggestion.cuisine)
+                                        Text(suggestion.priceLevel)
+                                        if let cost = suggestion.estimatedCostUsd, cost > 0 {
+                                            Text("~$\(Int(cost))")
+                                        }
+                                    }
+                                    .font(.caption2)
+                                    .foregroundStyle(DesignTokens.textTertiary)
+                                }
+                                .padding(DesignTokens.spacingSM)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .glassmorphic(cornerRadius: DesignTokens.radiusMD)
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
                 }
-                .font(.caption2)
-                .foregroundStyle(DesignTokens.textSecondary)
-
-                slotActions(slot: slot, dayNumber: dayNumber)
-
-                ExternalLinkButton(placeName: slot.activityName, city: viewModel.itinerary.destination)
+                .padding(DesignTokens.spacingMD)
             }
-            .padding(DesignTokens.spacingSM)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .glassmorphic(cornerRadius: DesignTokens.radiusMD)
-
-            Spacer(minLength: 0)
+            .background(DesignTokens.backgroundPrimary)
+            .navigationTitle("Pick a Replacement")
+            .navigationBarTitleDisplayMode(.inline)
         }
-        .padding(.horizontal, DesignTokens.spacingMD)
-        .padding(.vertical, DesignTokens.spacingXS)
-        .contentShape(Rectangle())
-        .scaleEffect(viewModel.draggingSlot == slot ? 1.05 : 1.0)
-        .shadow(color: viewModel.draggingSlot == slot ? DesignTokens.accentCyan.opacity(0.3) : .clear, radius: 8, y: 4)
-        .animation(.easeInOut(duration: 0.2), value: viewModel.draggingSlot == slot)
-        .overlay(alignment: .top) {
-            // Drop indicator line
-            if viewModel.draggingSlot != nil && viewModel.draggingSlot != slot {
-                Rectangle()
-                    .fill(DesignTokens.accentCyan)
-                    .frame(height: 2)
-                    .padding(.horizontal, DesignTokens.spacingLG)
-            }
-        }
-        .onTapGesture {
-            viewModel.selectedSlot = slot
-            viewModel.showDetail = true
-        }
-        .onDrag {
-            viewModel.draggingSlot = slot
-            viewModel.draggingFromDay = dayNumber
-            let data = "\(dayNumber)|\(slot.activityName)".data(using: .utf8) ?? Data()
-            return NSItemProvider(item: data as NSData, typeIdentifier: "public.text")
-        }
-        .onDrop(of: [.text], isTargeted: nil) { _ in
-            // Drop indicator: accept drop at this position
-            if let dragging = viewModel.draggingSlot,
-               let fromDay = viewModel.draggingFromDay,
-               fromDay == dayNumber {
-                if let dayIdx = viewModel.itinerary.days.firstIndex(where: { $0.dayNumber == dayNumber }),
-                   let fromIdx = viewModel.itinerary.days[dayIdx].slots.firstIndex(where: { $0 == dragging }),
-                   let toIdx = viewModel.itinerary.days[dayIdx].slots.firstIndex(where: { $0 == slot }),
-                   fromIdx != toIdx {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        viewModel.itinerary.days[dayIdx].slots.move(
-                            fromOffsets: IndexSet(integer: fromIdx),
-                            toOffset: toIdx > fromIdx ? toIdx + 1 : toIdx
-                        )
-                    }
-                    viewModel.recalculateCost()
-                }
-            }
-            viewModel.draggingSlot = nil
-            viewModel.draggingFromDay = nil
-            return true
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(slot.timeSlot): \(slot.activityName), \(slot.estimatedDurationMin) minutes")
-        .accessibilityHint("Tap for details. Long press to drag and reorder.")
     }
-
-    // MARK: - Slot Actions (Req 5.5, 5.7)
-
-    private func slotActions(slot: ItinerarySlot, dayNumber: Int) -> some View {
-        HStack(spacing: 16) {
-            Button {
-                Task {
-                    await viewModel.replaceActivity(dayNumber: dayNumber, slot: slot)
-                }
-            } label: {
-                Label("Replace", systemImage: "arrow.triangle.2.circlepath")
-                    .font(.caption2)
-                    .foregroundStyle(DesignTokens.accentCyan)
-            }
-            .disabled(viewModel.isReplacing)
-            .accessibilityLabel("Replace \(slot.activityName)")
-
-            Button(role: .destructive) {
-                viewModel.removeActivity(from: dayNumber, slot: slot)
-            } label: {
-                Label("Remove", systemImage: "trash")
-                    .font(.caption2)
-            }
-            .accessibilityLabel("Remove \(slot.activityName)")
-        }
-        .padding(.top, 4)
-    }
-
-    // MARK: - Restaurant Row
-
-    private func restaurantRow(restaurant: ItineraryRestaurant) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(spacing: 0) {
-                Image(systemName: "fork.knife.circle.fill")
-                    .foregroundStyle(DesignTokens.accentCyan)
-                    .font(.title3)
-            }
-            .frame(width: 12)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Restaurant")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(DesignTokens.accentCyan)
-                Text(restaurant.name)
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(DesignTokens.textPrimary)
-                HStack(spacing: 8) {
-                    Text(restaurant.cuisine)
-                    Text(PriceFormatter.restaurantPriceFromTier(restaurant.priceLevel))
-                    if restaurant.rating > 0 {
-                        Label(String(format: "%.1f", restaurant.rating), systemImage: "star.fill")
-                            .foregroundStyle(.yellow)
-                    }
-                }
-                .font(.caption2)
-                .foregroundStyle(DesignTokens.textSecondary)
-
-                Text("Estimated")
-                    .font(.caption2)
-                    .foregroundStyle(DesignTokens.textTertiary)
-
-                // Origin label
-                if let origin = restaurant.origin {
-                    Text(origin == "user" ? "Selected by you" : "Suggested")
-                        .font(.caption2)
-                        .foregroundStyle(DesignTokens.textTertiary)
-                } else {
-                    Text("Suggested")
-                        .font(.caption2)
-                        .foregroundStyle(DesignTokens.textTertiary)
-                }
-
-                ExternalLinkButton(placeName: restaurant.name, city: viewModel.itinerary.destination)
-            }
-            .padding(.vertical, 8)
-
-            Spacer()
-        }
-        .padding(.horizontal, DesignTokens.spacingMD)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Restaurant: \(restaurant.name), \(restaurant.cuisine), rating \(String(format: "%.1f", restaurant.rating))")
-    }
-
-    // MARK: - Add Activity Button (Req 5.6)
-
-    private func addActivityButton(dayNumber: Int) -> some View {
-        Button {
-            viewModel.addActivityDayNumber = dayNumber
-            viewModel.showAddActivity = true
-        } label: {
-            HStack {
-                Image(systemName: "plus.circle.fill")
-                Text("Add Activity")
-            }
-            .font(.subheadline)
-            .foregroundStyle(DesignTokens.accentCyan)
-            .padding(.horizontal, DesignTokens.spacingMD)
-            .padding(.vertical, 10)
-        }
-        .accessibilityLabel("Add activity to Day \(dayNumber)")
-    }
-
-    // MARK: - Cross-day drop handler (Req 5.4)
-
-    private func handleCrossDayDrop(providers: [NSItemProvider], targetDay: Int) -> Bool {
-        guard let slot = viewModel.draggingSlot,
-              let fromDay = viewModel.draggingFromDay else { return false }
-        viewModel.moveSlotToDay(slot, fromDay: fromDay, toDay: targetDay)
-        viewModel.draggingSlot = nil
-        viewModel.draggingFromDay = nil
-        return true
-    }
-
-    // MARK: - Replacing Overlay
 
     private var replacingOverlay: some View {
         ZStack {
@@ -701,7 +547,7 @@ struct ItineraryView: View {
             VStack(spacing: 12) {
                 ProgressView()
                     .tint(DesignTokens.accentCyan)
-                Text("Finding alternative…")
+                Text("Finding alternatives…")
                     .font(.subheadline)
                     .foregroundStyle(DesignTokens.textPrimary)
             }
@@ -709,25 +555,10 @@ struct ItineraryView: View {
             .glassmorphic(cornerRadius: DesignTokens.radiusMD)
         }
     }
-
-    // MARK: - Helpers
-
-    private func timeSlotColor(_ timeSlot: String) -> Color {
-        switch timeSlot.lowercased() {
-        case "morning": return DesignTokens.accentCyan
-        case "afternoon": return DesignTokens.accentBlue
-        case "evening": return .purple
-        default: return .gray
-        }
-    }
 }
 
+// MARK: - Slot Detail View
 
-
-// MARK: - Slot Detail View (Req 5.2)
-
-/// Sheet presenting activity details with map snippet, description, and duration.
-/// Validates: Requirement 5.2
 struct SlotDetailView: View {
 
     let slot: ItinerarySlot
@@ -737,7 +568,6 @@ struct SlotDetailView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    // Map snippet
                     if slot.latitude != 0, slot.longitude != 0 {
                         let region = MKCoordinateRegion(
                             center: CLLocationCoordinate2D(latitude: slot.latitude, longitude: slot.longitude),
@@ -776,11 +606,7 @@ struct SlotDetailView: View {
                             detailRow(icon: "car", label: "Travel to Next", value: "\(travel) minutes")
                         }
                         if slot.latitude != 0, slot.longitude != 0 {
-                            detailRow(
-                                icon: "location",
-                                label: "Coordinates",
-                                value: String(format: "%.4f, %.4f", slot.latitude, slot.longitude)
-                            )
+                            detailRow(icon: "location", label: "Coordinates", value: String(format: "%.4f, %.4f", slot.latitude, slot.longitude))
                         }
                     }
 
@@ -819,10 +645,8 @@ struct SlotDetailView: View {
     }
 }
 
-// MARK: - Add Activity Sheet (Req 5.6)
+// MARK: - Add Activity Sheet
 
-/// Sheet for adding a custom activity to a day.
-/// Validates: Requirement 5.6
 struct AddActivitySheet: View {
 
     let dayNumber: Int
@@ -834,8 +658,7 @@ struct AddActivitySheet: View {
     @State private var durationText: String = "60"
 
     private var isValid: Bool {
-        !name.trimmingCharacters(in: .whitespaces).isEmpty
-            && (Int(durationText) ?? 0) > 0
+        !name.trimmingCharacters(in: .whitespaces).isEmpty && (Int(durationText) ?? 0) > 0
     }
 
     var body: some View {
@@ -843,16 +666,12 @@ struct AddActivitySheet: View {
             Form {
                 Section {
                     TextField("Activity name", text: $name)
-                        .accessibilityLabel("Activity name")
                     TextField("Description (optional)", text: $description)
-                        .accessibilityLabel("Activity description")
                     TextField("Duration in minutes", text: $durationText)
                         .keyboardType(.numberPad)
-                        .accessibilityLabel("Duration in minutes")
                 } header: {
                     Text("Add Activity to Day \(dayNumber)")
                 }
-
                 Section {
                     Button {
                         let duration = Int(durationText) ?? 60
@@ -861,8 +680,7 @@ struct AddActivitySheet: View {
                     } label: {
                         HStack {
                             Spacer()
-                            Text("Add Activity")
-                                .font(.headline)
+                            Text("Add Activity").font(.headline)
                             Spacer()
                         }
                     }
@@ -886,25 +704,21 @@ struct AddActivitySheet: View {
     let sampleItinerary = ItineraryResponse(
         destination: "Tokyo",
         numDays: 2,
-        vibe: "Foodie",
+        vibes: ["Foodie"],
+        budgetTier: "$$$",
         days: [
             ItineraryDay(
                 dayNumber: 1,
                 slots: [
-                    ItinerarySlot(timeSlot: "Morning", activityName: "Tsukiji Outer Market", description: "Explore fresh seafood stalls and street food", latitude: 35.6654, longitude: 139.7707, estimatedDurationMin: 120, travelTimeToNextMin: 15, estimatedCostUsd: 20),
-                    ItinerarySlot(timeSlot: "Afternoon", activityName: "Senso-ji Temple", description: "Visit Tokyo's oldest temple in Asakusa", latitude: 35.7148, longitude: 139.7967, estimatedDurationMin: 90, travelTimeToNextMin: 20, estimatedCostUsd: 0),
-                    ItinerarySlot(timeSlot: "Evening", activityName: "Shibuya Crossing", description: "Experience the world's busiest pedestrian crossing", latitude: 35.6595, longitude: 139.7004, estimatedDurationMin: 60, travelTimeToNextMin: nil, estimatedCostUsd: 0)
+                    ItinerarySlot(timeSlot: "Morning", activityName: "Tsukiji Outer Market", description: "Explore fresh seafood stalls", latitude: 35.6654, longitude: 139.7707, estimatedDurationMin: 120, travelTimeToNextMin: 15, estimatedCostUsd: 20),
+                    ItinerarySlot(timeSlot: "Afternoon", activityName: "Senso-ji Temple", description: "Visit Tokyo's oldest temple", latitude: 35.7148, longitude: 139.7967, estimatedDurationMin: 90, travelTimeToNextMin: 20, estimatedCostUsd: 0),
+                    ItinerarySlot(timeSlot: "Evening", activityName: "Shibuya Crossing", description: "Experience the world's busiest crossing", latitude: 35.6595, longitude: 139.7004, estimatedDurationMin: 60, travelTimeToNextMin: nil, estimatedCostUsd: 0)
                 ],
-                restaurant: ItineraryRestaurant(name: "Sushi Dai", cuisine: "Sushi", priceLevel: "$", rating: 4.7, latitude: 35.6655, longitude: 139.7710, imageUrl: nil, origin: "ai")
+                meals: [
+                    MealSlot(mealType: "Breakfast", restaurantName: "Sushi Dai", cuisine: "Sushi", priceLevel: "$$", latitude: 35.6655, longitude: 139.7710, estimatedCostUsd: 35, isEstimated: true),
+                    MealSlot(mealType: "Lunch", restaurantName: "Ichiran", cuisine: "Ramen", priceLevel: "$$", latitude: 35.66, longitude: 139.70, estimatedCostUsd: 15, isEstimated: true),
+                ]
             ),
-            ItineraryDay(
-                dayNumber: 2,
-                slots: [
-                    ItinerarySlot(timeSlot: "Morning", activityName: "Meiji Shrine", description: "Peaceful Shinto shrine in a forested area", latitude: 35.6764, longitude: 139.6993, estimatedDurationMin: 90, travelTimeToNextMin: 10, estimatedCostUsd: 0),
-                    ItinerarySlot(timeSlot: "Afternoon", activityName: "Harajuku & Takeshita Street", description: "Trendy fashion district with unique shops", latitude: 35.6702, longitude: 139.7026, estimatedDurationMin: 120, travelTimeToNextMin: nil, estimatedCostUsd: 30)
-                ],
-                restaurant: nil
-            )
         ]
     )
     ItineraryView(itinerary: sampleItinerary)

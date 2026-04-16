@@ -1,20 +1,22 @@
 import SwiftUI
 import UIKit
 
-// MARK: - Trip Result Tabs
+// MARK: - Trip Result Tabs (4 tabs)
 
 /// Tabs displayed after itinerary generation.
 enum TripResultTab: String, CaseIterable, Identifiable {
     case itinerary = "Itinerary"
-    case recommendations = "Places"
+    case stays = "Stays"
+    case foodDrinks = "Food & Drinks"
     case cost = "Cost"
 
     var id: String { rawValue }
 
     var icon: String {
         switch self {
-        case .itinerary: return "list.bullet.below.rectangle"
-        case .recommendations: return "building.2"
+        case .itinerary: return "calendar"
+        case .stays: return "building.2"
+        case .foodDrinks: return "fork.knife"
         case .cost: return "dollarsign.circle"
         }
     }
@@ -22,17 +24,12 @@ enum TripResultTab: String, CaseIterable, Identifiable {
 
 // MARK: - Trip Result View
 
-/// Combines Itinerary, Recommendations, and Cost views into a tabbed interface
-/// with Save and Share actions accessible from the toolbar.
-/// Validates: Requirements 1.1, 1.4, 2.3, 3.5, 9.1, 10.1
 struct TripResultView: View {
 
     let itinerary: ItineraryResponse
     let city: CityMarker
-    let hotelPriceRange: String
-    let hotelVibe: String?
-    let restaurantPriceRange: String
-    let cuisineType: String?
+    let vibes: [String]
+    let budgetTier: String
 
     @Environment(\.dismiss) private var dismiss
     @State private var selectedTab: TripResultTab = .itinerary
@@ -49,31 +46,23 @@ struct TripResultView: View {
     init(
         itinerary: ItineraryResponse,
         city: CityMarker,
-        hotelPriceRange: String,
-        hotelVibe: String?,
-        restaurantPriceRange: String,
-        cuisineType: String?
+        vibes: [String],
+        budgetTier: String
     ) {
         self.itinerary = itinerary
         self.city = city
-        self.hotelPriceRange = hotelPriceRange
-        self.hotelVibe = hotelVibe
-        self.restaurantPriceRange = restaurantPriceRange
-        self.cuisineType = cuisineType
+        self.vibes = vibes
+        self.budgetTier = budgetTier
 
         _itineraryVM = StateObject(wrappedValue: ItineraryViewModel(itinerary: itinerary))
         _recommendationsVM = StateObject(wrappedValue: RecommendationsViewModel(
             latitude: city.latitude,
             longitude: city.longitude,
-            hotelPriceRange: hotelPriceRange,
-            hotelVibe: hotelVibe,
-            restaurantPriceRange: restaurantPriceRange,
-            cuisineType: cuisineType,
             cityName: city.name
         ))
         _costVM = StateObject(wrappedValue: CostViewModel(
             itinerary: itinerary,
-            restaurantPriceRange: restaurantPriceRange
+            budgetTier: budgetTier
         ))
     }
 
@@ -83,13 +72,8 @@ struct TripResultView: View {
                 DesignTokens.backgroundPrimary.ignoresSafeArea()
 
                 VStack(spacing: 0) {
-                    // Header
                     tripHeader
-
-                    // Tab picker
                     tabPicker
-
-                    // Tab content
                     tabContent
                 }
             }
@@ -100,7 +84,6 @@ struct TripResultView: View {
                         .foregroundStyle(DesignTokens.textPrimary)
                 }
                 ToolbarItemGroup(placement: .primaryAction) {
-                    // Share button (Req 14.5, 14.6)
                     Button {
                         showShareSheet = true
                     } label: {
@@ -108,7 +91,6 @@ struct TripResultView: View {
                     }
                     .foregroundStyle(DesignTokens.accentCyan)
                     .accessibilityLabel("Share trip")
-                    // Bookmark toggle (Req 10.1, 10.2, 10.3)
                     bookmarkButton
                 }
             }
@@ -126,10 +108,7 @@ struct TripResultView: View {
                 )
             }
             .onAppear {
-                // Check if trip is already saved (Req 10.4, 10.5)
                 loadPersistedBookmarkState()
-
-                // Wire hotel selection to cost recalculation (Req 8.5)
                 recommendationsVM.onHotelSelectionChanged = { hotel in
                     guard let hotel else { return }
                     Task {
@@ -137,8 +116,6 @@ struct TripResultView: View {
                         await costVM.recalculate(hotelNightlyRate: rate)
                     }
                 }
-
-                // Check if trip is already saved on the server (Req 10.5)
                 if savedTripId == nil {
                     Task { await checkIfAlreadySaved() }
                 }
@@ -153,9 +130,18 @@ struct TripResultView: View {
             Text(itinerary.destination)
                 .font(.title2.weight(.bold))
                 .foregroundStyle(DesignTokens.textPrimary)
-            Text("\(itinerary.numDays) days · \(itinerary.vibe)")
-                .font(.subheadline)
-                .foregroundStyle(DesignTokens.textSecondary)
+            HStack(spacing: 6) {
+                Text("\(itinerary.numDays) days")
+                    .font(.subheadline)
+                    .foregroundStyle(DesignTokens.textSecondary)
+                if !vibes.isEmpty {
+                    Text("·")
+                        .foregroundStyle(DesignTokens.textTertiary)
+                    Text(vibes.joined(separator: ", "))
+                        .font(.subheadline)
+                        .foregroundStyle(DesignTokens.accentCyan)
+                }
+            }
         }
         .padding(.vertical, DesignTokens.spacingSM)
     }
@@ -196,7 +182,6 @@ struct TripResultView: View {
         .padding(.horizontal, DesignTokens.spacingMD)
     }
 
-
     // MARK: - Tab Content
 
     @ViewBuilder
@@ -204,8 +189,10 @@ struct TripResultView: View {
         switch selectedTab {
         case .itinerary:
             itineraryTab
-        case .recommendations:
-            RecommendationsView(viewModel: recommendationsVM)
+        case .stays:
+            StaysView(viewModel: recommendationsVM, budgetTier: budgetTier, numDays: itinerary.numDays, costVM: costVM)
+        case .foodDrinks:
+            FoodDrinksView(itineraryVM: itineraryVM, budgetTier: budgetTier, vibes: vibes)
         case .cost:
             ScrollView {
                 CostBreakdownView(viewModel: costVM)
@@ -213,14 +200,12 @@ struct TripResultView: View {
         }
     }
 
-    // MARK: - Itinerary Tab (inline, not wrapped in NavigationStack)
+    // MARK: - Itinerary Tab
 
     private var itineraryTab: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
-                // "Why This Plan" reasoning card (Req 9.1, 9.2)
                 whyThisPlanCard
-
                 ForEach(itineraryVM.itinerary.days) { day in
                     InlineDaySectionView(day: day, viewModel: itineraryVM)
                 }
@@ -239,20 +224,16 @@ struct TripResultView: View {
         }
     }
 
-    // MARK: - Why This Plan Card (Req 9.1, 9.2)
-
     private var whyThisPlanCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             Label("Why This Plan", systemImage: "lightbulb.fill")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(DesignTokens.accentCyan)
-
             if let reasoning = itineraryVM.itinerary.reasoningText, !reasoning.isEmpty {
                 Text(reasoning)
                     .font(.caption)
                     .foregroundStyle(DesignTokens.textPrimary)
             }
-
             Text("Optimized for minimal travel time and best experience flow")
                 .font(.caption2)
                 .foregroundStyle(DesignTokens.textSecondary)
@@ -266,7 +247,7 @@ struct TripResultView: View {
         .accessibilityLabel("Why This Plan")
     }
 
-    // MARK: - Bookmark Button (Req 10.1, 10.2, 10.3)
+    // MARK: - Bookmark Button
 
     @ViewBuilder
     private var bookmarkButton: some View {
@@ -274,8 +255,7 @@ struct TripResultView: View {
             Task { await toggleBookmark() }
         } label: {
             if isSaving {
-                ProgressView()
-                    .controlSize(.small)
+                ProgressView().controlSize(.small)
             } else {
                 Image(systemName: savedTripId != nil ? "bookmark.fill" : "bookmark")
             }
@@ -285,10 +265,7 @@ struct TripResultView: View {
         .accessibilityLabel(savedTripId != nil ? "Remove bookmark" : "Bookmark trip")
     }
 
-    // MARK: - Bookmark Toggle (Req 10.2, 10.3)
-
     private func toggleBookmark() async {
-        // Haptic feedback on bookmark tap (Req 16.2)
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         if let tripId = savedTripId {
             await unsaveTrip(tripId: tripId)
@@ -297,24 +274,20 @@ struct TripResultView: View {
         }
     }
 
-    // MARK: - Save Trip
-
     private func saveTrip() async {
         isSaving = true
         saveError = nil
-
         let request = TripSaveRequest(
             destination: itinerary.destination,
             destinationLatLng: "\(city.latitude),\(city.longitude)",
             numDays: itinerary.numDays,
-            vibe: itinerary.vibe,
+            vibe: vibes.first,
             preferences: nil,
             itinerary: nil,
             selectedHotelId: recommendationsVM.selectedHotel?.placeId,
             selectedRestaurants: nil,
             costBreakdown: nil
         )
-
         do {
             let response: TripResponse = try await APIClient.shared.request(
                 .post, path: "/trips", body: request
@@ -326,20 +299,14 @@ struct TripResultView: View {
         } catch {
             saveError = "Failed to save trip. Please try again."
         }
-
         isSaving = false
     }
-
-    // MARK: - Unsave Trip (Req 10.3)
 
     private func unsaveTrip(tripId: String) async {
         isSaving = true
         saveError = nil
-
         do {
-            try await APIClient.shared.requestVoid(
-                .delete, path: "/trips/\(tripId)"
-            )
+            try await APIClient.shared.requestVoid(.delete, path: "/trips/\(tripId)")
             savedTripId = nil
             clearPersistedBookmarkState()
         } catch let error as APIError {
@@ -347,15 +314,11 @@ struct TripResultView: View {
         } catch {
             saveError = "Failed to remove trip. Please try again."
         }
-
         isSaving = false
     }
 
-    // MARK: - Bookmark Persistence (Req 10.4)
-
-    /// Key used to persist the saved trip ID in UserDefaults, scoped to this trip's identity.
     private var bookmarkPersistenceKey: String {
-        "bookmark_\(itinerary.destination)_\(itinerary.numDays)_\(itinerary.vibe)"
+        "bookmark_\(itinerary.destination)_\(itinerary.numDays)_\(vibes.joined(separator: ","))"
     }
 
     private func persistBookmarkState(tripId: String) {
@@ -372,81 +335,59 @@ struct TripResultView: View {
         }
     }
 
-    // MARK: - Check If Already Saved (Req 10.5)
-
     private func checkIfAlreadySaved() async {
         do {
-            let trips: [TripListItem] = try await APIClient.shared.request(
-                .get, path: "/trips"
-            )
+            let trips: [TripListItem] = try await APIClient.shared.request(.get, path: "/trips")
             if let match = trips.first(where: {
-                $0.destination == itinerary.destination
-                && $0.numDays == itinerary.numDays
-                && $0.vibe == itinerary.vibe
+                $0.destination == itinerary.destination && $0.numDays == itinerary.numDays
             }) {
                 savedTripId = match.id
                 persistBookmarkState(tripId: match.id)
             }
-        } catch {
-            // Silently fail — bookmark will just show unfilled
-        }
+        } catch { }
     }
-
-    // MARK: - Helpers
 
     private func estimateNightlyRate(priceLevel: String) -> Double {
         switch priceLevel {
         case "$": return 80
-        case "$": return 150
-        case "$$": return 250
+        case "$$": return 150
+        case "$$$": return 250
         default: return 100
         }
     }
 }
 
-
-
 // MARK: - Inline Day Section View
 
-/// Renders a single day's itinerary section for use inside TripResultView.
-/// Reuses ItineraryViewModel for state management.
 struct InlineDaySectionView: View {
 
     let day: ItineraryDay
     @ObservedObject var viewModel: ItineraryViewModel
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Day header with map button
             daySectionHeader
 
-            // Timeline bar (Req 8.1, 8.2, 8.3, 8.4)
-            TimelineBarView(day: day) { _ in }
-
-            // Slots
-            ForEach(Array(day.slots.enumerated()), id: \.element.id) { index, slot in
-                inlineSlotCard(slot: slot, isLast: index == day.slots.count - 1)
-            }
-
-            // Restaurant
-            if let restaurant = day.restaurant {
-                inlineRestaurantRow(restaurant: restaurant)
-            }
-
-            // Add activity
-            Button {
-                viewModel.addActivityDayNumber = day.dayNumber
-                viewModel.showAddActivity = true
-            } label: {
-                HStack {
-                    Image(systemName: "plus.circle.fill")
-                    Text("Add Activity")
+            // Time blocks with merged activities and meals
+            let items = day.timeBlockItems
+            let blocks = ["Morning", "Afternoon", "Evening"]
+            ForEach(blocks, id: \.self) { block in
+                let blockItems = items.filter { $0.timeBlock == block }
+                if !blockItems.isEmpty {
+                    timeBlockHeader(block)
+                    ForEach(Array(blockItems.enumerated()), id: \.element.id) { index, item in
+                        switch item {
+                        case .activity(let slot):
+                            inlineSlotCard(slot: slot, isLast: index == blockItems.count - 1)
+                        case .meal(let meal):
+                            inlineMealCard(meal: meal)
+                        }
+                    }
                 }
-                .font(.subheadline)
-                .foregroundStyle(DesignTokens.accentCyan)
-                .padding(.horizontal, DesignTokens.spacingMD)
-                .padding(.vertical, 10)
             }
-            .accessibilityLabel("Add activity to Day \(day.dayNumber)")
+
+            // Add actions
+            addItemMenu(dayNumber: day.dayNumber)
         }
     }
 
@@ -458,7 +399,6 @@ struct InlineDaySectionView: View {
                 .font(.title3.weight(.bold))
                 .foregroundStyle(DesignTokens.textPrimary)
             Spacer()
-            // Open in Apple Maps button (Req 8.1, 8.2)
             Button {
                 viewModel.openInAppleMaps(day: day)
             } label: {
@@ -469,7 +409,7 @@ struct InlineDaySectionView: View {
             .disabled(day.slots.isEmpty)
             .opacity(day.slots.isEmpty ? 0.4 : 1.0)
             .accessibilityLabel("Open Day \(day.dayNumber) in Apple Maps")
-            Text("\(day.slots.count) activities")
+            Text("\(day.slots.count + day.meals.count) items")
                 .font(.caption)
                 .foregroundStyle(DesignTokens.textSecondary)
         }
@@ -478,9 +418,17 @@ struct InlineDaySectionView: View {
         .background(DesignTokens.backgroundSecondary)
     }
 
+    private func timeBlockHeader(_ block: String) -> some View {
+        Text(block)
+            .font(.caption.weight(.bold))
+            .foregroundStyle(timeSlotColor(block))
+            .padding(.horizontal, DesignTokens.spacingMD)
+            .padding(.top, DesignTokens.spacingSM)
+            .padding(.bottom, DesignTokens.spacingXS)
+    }
+
     private func inlineSlotCard(slot: ItinerarySlot, isLast: Bool) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            // Timeline indicator
             VStack(spacing: 0) {
                 Circle()
                     .fill(timeSlotColor(slot.timeSlot))
@@ -494,11 +442,7 @@ struct InlineDaySectionView: View {
             }
             .frame(width: 12)
 
-            // Activity card content
             VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
-                Text(slot.timeSlot)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(timeSlotColor(slot.timeSlot))
                 Text(slot.activityName)
                     .font(.body.weight(.medium))
                     .foregroundStyle(DesignTokens.textPrimary)
@@ -508,10 +452,7 @@ struct InlineDaySectionView: View {
                         .foregroundStyle(DesignTokens.accentCyan)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 2)
-                        .background(
-                            Capsule()
-                                .fill(DesignTokens.accentCyan.opacity(0.2))
-                        )
+                        .background(Capsule().fill(DesignTokens.accentCyan.opacity(0.2)))
                 }
                 Text(slot.description)
                     .font(.caption)
@@ -530,7 +471,6 @@ struct InlineDaySectionView: View {
                 .font(.caption2)
                 .foregroundStyle(DesignTokens.textSecondary)
 
-                // Actions
                 HStack(spacing: 16) {
                     Button {
                         Task {
@@ -569,53 +509,99 @@ struct InlineDaySectionView: View {
         }
     }
 
-    private func inlineRestaurantRow(restaurant: ItineraryRestaurant) -> some View {
+    private func inlineMealCard(meal: MealSlot) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: "fork.knife.circle.fill")
                 .foregroundStyle(DesignTokens.accentCyan)
                 .font(.title3)
                 .frame(width: 12)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Restaurant")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(DesignTokens.accentCyan)
-                Text(restaurant.name)
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(DesignTokens.textPrimary)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(meal.mealType)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(DesignTokens.accentCyan))
+                    Text(meal.restaurantName)
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(DesignTokens.textPrimary)
+                }
                 HStack(spacing: 8) {
-                    Text(restaurant.cuisine)
-                    Text(PriceFormatter.restaurantPriceFromTier(restaurant.priceLevel))
-                    if restaurant.rating > 0 {
-                        Label(String(format: "%.1f", restaurant.rating), systemImage: "star.fill")
-                            .foregroundStyle(.yellow)
+                    Text(meal.cuisine)
+                    Text(meal.priceLevel)
+                    if let cost = meal.estimatedCostUsd, cost > 0 {
+                        Text("~$\(Int(cost))")
                     }
                 }
                 .font(.caption2)
                 .foregroundStyle(DesignTokens.textSecondary)
 
-                Text("Estimated")
-                    .font(.caption2)
-                    .foregroundStyle(DesignTokens.textTertiary)
-
-                // Origin label
-                if let origin = restaurant.origin {
-                    Text(origin == "user" ? "Selected by you" : "Suggested")
-                        .font(.caption2)
-                        .foregroundStyle(DesignTokens.textTertiary)
-                } else {
-                    Text("Suggested")
+                if meal.isEstimated {
+                    Text("Estimated")
                         .font(.caption2)
                         .foregroundStyle(DesignTokens.textTertiary)
                 }
 
-                ExternalLinkButton(placeName: restaurant.name, city: viewModel.itinerary.destination)
+                HStack(spacing: 16) {
+                    Button {
+                        Task {
+                            await viewModel.replaceMeal(dayNumber: day.dayNumber, meal: meal)
+                        }
+                    } label: {
+                        Label("Replace", systemImage: "arrow.triangle.2.circlepath")
+                            .font(.caption2)
+                            .foregroundStyle(DesignTokens.accentCyan)
+                    }
+                    .disabled(viewModel.isReplacing)
+
+                    Button(role: .destructive) {
+                        viewModel.removeMeal(from: day.dayNumber, meal: meal)
+                    } label: {
+                        Label("Remove", systemImage: "trash")
+                            .font(.caption2)
+                    }
+                }
+                .padding(.top, 2)
             }
             .padding(.vertical, 8)
 
             Spacer()
         }
         .padding(.horizontal, DesignTokens.spacingMD)
+        .padding(.vertical, DesignTokens.spacingXS)
+    }
+
+    private func addItemMenu(dayNumber: Int) -> some View {
+        Menu {
+            Button { viewModel.addMeal(to: dayNumber, mealType: "Breakfast") } label: {
+                Label("Add Breakfast", systemImage: "sunrise")
+            }
+            Button { viewModel.addMeal(to: dayNumber, mealType: "Lunch") } label: {
+                Label("Add Lunch", systemImage: "sun.max")
+            }
+            Button { viewModel.addMeal(to: dayNumber, mealType: "Dinner") } label: {
+                Label("Add Dinner", systemImage: "moon")
+            }
+            Divider()
+            Button {
+                viewModel.addActivityDayNumber = dayNumber
+                viewModel.showAddActivity = true
+            } label: {
+                Label("Add Activity", systemImage: "plus.circle")
+            }
+        } label: {
+            HStack {
+                Image(systemName: "plus.circle.fill")
+                Text("Add")
+            }
+            .font(.subheadline)
+            .foregroundStyle(DesignTokens.accentCyan)
+            .padding(.horizontal, DesignTokens.spacingMD)
+            .padding(.vertical, 10)
+        }
+        .accessibilityLabel("Add item to Day \(dayNumber)")
     }
 
     private func timeSlotColor(_ timeSlot: String) -> Color {
@@ -630,15 +616,11 @@ struct InlineDaySectionView: View {
 
 // MARK: - UIActivityViewController Wrapper
 
-/// SwiftUI wrapper for UIActivityViewController to present the system share sheet.
-/// Validates: Requirement 14.6
 struct ActivityViewControllerWrapper: UIViewControllerRepresentable {
     let activityItems: [Any]
-
     func makeUIViewController(context: Context) -> UIActivityViewController {
         UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
     }
-
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
@@ -648,24 +630,27 @@ struct ActivityViewControllerWrapper: UIViewControllerRepresentable {
     let sampleItinerary = ItineraryResponse(
         destination: "Tokyo",
         numDays: 2,
-        vibe: "Foodie",
+        vibes: ["Foodie"],
+        budgetTier: "$$$",
         days: [
             ItineraryDay(
                 dayNumber: 1,
                 slots: [
-                    ItinerarySlot(timeSlot: "Morning", activityName: "Tsukiji Outer Market", description: "Explore fresh seafood stalls and street food", latitude: 35.6654, longitude: 139.7707, estimatedDurationMin: 120, travelTimeToNextMin: 15, estimatedCostUsd: 20),
-                    ItinerarySlot(timeSlot: "Afternoon", activityName: "Senso-ji Temple", description: "Visit Tokyo's oldest temple in Asakusa", latitude: 35.7148, longitude: 139.7967, estimatedDurationMin: 90, travelTimeToNextMin: 20, estimatedCostUsd: 0),
+                    ItinerarySlot(timeSlot: "Morning", activityName: "Tsukiji Outer Market", description: "Explore fresh seafood stalls", latitude: 35.6654, longitude: 139.7707, estimatedDurationMin: 120, travelTimeToNextMin: 15, estimatedCostUsd: 20),
+                    ItinerarySlot(timeSlot: "Afternoon", activityName: "Senso-ji Temple", description: "Visit Tokyo's oldest temple", latitude: 35.7148, longitude: 139.7967, estimatedDurationMin: 90, travelTimeToNextMin: 20, estimatedCostUsd: 0),
                 ],
-                restaurant: ItineraryRestaurant(name: "Sushi Dai", cuisine: "Sushi", priceLevel: "$", rating: 4.7, latitude: 35.6655, longitude: 139.7710, imageUrl: nil, origin: "ai")
+                meals: [
+                    MealSlot(mealType: "Breakfast", restaurantName: "Sushi Dai", cuisine: "Sushi", priceLevel: "$$", latitude: 35.6655, longitude: 139.7710, estimatedCostUsd: 35, isEstimated: true),
+                    MealSlot(mealType: "Lunch", restaurantName: "Ichiran Ramen", cuisine: "Ramen", priceLevel: "$$", latitude: 35.66, longitude: 139.70, estimatedCostUsd: 15, isEstimated: true),
+                    MealSlot(mealType: "Dinner", restaurantName: "Gonpachi", cuisine: "Japanese", priceLevel: "$$$", latitude: 35.656, longitude: 139.726, estimatedCostUsd: 50, isEstimated: true),
+                ]
             ),
         ]
     )
     TripResultView(
         itinerary: sampleItinerary,
         city: CityMarker(name: "Tokyo", latitude: 35.6762, longitude: 139.6503),
-        hotelPriceRange: "$",
-        hotelVibe: nil,
-        restaurantPriceRange: "$",
-        cuisineType: "Japanese"
+        vibes: ["Foodie"],
+        budgetTier: "$$$"
     )
 }

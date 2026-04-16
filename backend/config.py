@@ -22,7 +22,7 @@ class Settings(BaseSettings):
 
     # Optional — free-tier services with fallbacks
     upstash_redis_url: str = ""
-    google_places_api_key: str = ""  # deprecated, kept for backward compat
+    google_places_api_key: str = ""  # Optional — Google Places API for real pricing data
     foursquare_api_key: str = ""     # Foursquare free tier
 
     model_config = {"env_file": str(Path(__file__).parent / ".env"), "extra": "ignore"}

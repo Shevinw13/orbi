@@ -1,40 +1,17 @@
 """Pydantic models for itinerary generation request and response.
 
 Covers the Itinerary_Engine data structures per the design doc.
-Requirements: 4.1, 4.2, 4.3, 4.5, 4.7
+Requirements: 2.5, 4.1, 5.1, 5.4, 13.1, 13.2, 13.3, 14.1, 14.2
 """
 
 from __future__ import annotations
 
+from typing import Union
+
 from pydantic import BaseModel, Field
 
 
-class ReplaceActivityRequest(BaseModel):
-    """POST /trips/replace-item request body (Req 5.5, 11.1–11.4)."""
-
-    destination: str = Field(..., description="City or destination name")
-    day_number: int = Field(..., ge=1, description="Day number in the itinerary")
-    time_slot: str = Field(..., description="Time slot to replace: Morning, Afternoon, or Evening")
-    current_activity_name: str = Field(..., description="Name of the activity being replaced")
-    existing_activities: list[str] = Field(
-        default_factory=list,
-        description="List of activity names already in the itinerary to avoid duplicates",
-    )
-    vibe: str = Field(..., description="Trip vibe: Foodie, Adventure, Relaxed, Nightlife")
-    adjacent_activity_coords: list[dict] | None = Field(
-        None,
-        description="Lat/lng coordinates of adjacent activities in the same day for proximity constraint",
-    )
-
-
-class SelectedRestaurant(BaseModel):
-    """A user-selected restaurant passed into itinerary generation."""
-
-    name: str
-    cuisine: str
-    price_level: str
-    latitude: float
-    longitude: float
+# --- Request Models ---
 
 
 class ItineraryRequest(BaseModel):
@@ -44,28 +21,33 @@ class ItineraryRequest(BaseModel):
     latitude: float = Field(..., description="Destination latitude")
     longitude: float = Field(..., description="Destination longitude")
     num_days: int = Field(..., ge=1, le=14, description="Trip length in days (1-14)")
-    hotel_price_range: str | None = Field(None, description="Hotel price range ($–$$$)")
-    hotel_vibe: str | None = Field(None, description="Hotel vibe (luxury, boutique, budget)")
-    restaurant_price_range: str | None = Field(None, description="Restaurant price range ($–$$$)")
-    cuisine_type: str | None = Field(None, description="Preferred cuisine type")
-    vibe: str = Field(..., description="Trip vibe: Foodie, Adventure, Relaxed, Nightlife")
+    budget_tier: str = Field(..., description="$, $$, $$$, $$$$, or $$$$$")
+    vibes: list[str] = Field(..., min_length=1, description="One or more vibes")
     family_friendly: bool = Field(False, description="Enable family-friendly mode")
-    selected_restaurants: list[SelectedRestaurant] | None = Field(
-        None, description="User pre-selected restaurants to inject into meal slots"
+
+
+class ReplaceActivityRequest(BaseModel):
+    """POST /trips/replace-item request body (Req 6.2, 14.1, 14.2)."""
+
+    destination: str = Field(..., description="City or destination name")
+    day_number: int = Field(..., ge=1, description="Day number in the itinerary")
+    time_slot: str = Field(..., description="Time slot: Morning, Afternoon, or Evening")
+    item_type: str = Field("activity", description="'activity' or 'meal'")
+    current_item_name: str = Field(..., description="Name of the item being replaced")
+    existing_activities: list[str] = Field(
+        default_factory=list,
+        description="List of activity/meal names already in the itinerary to avoid duplicates",
     )
+    vibes: list[str] = Field(default_factory=list, description="Trip vibes")
+    budget_tier: str = Field("", description="Budget tier ($-$$$$$)")
+    adjacent_activity_coords: list[dict] | None = Field(
+        None,
+        description="Lat/lng coordinates of adjacent activities for proximity constraint",
+    )
+    num_suggestions: int = Field(5, ge=1, le=10, description="Number of suggestions to return")
 
 
-class RestaurantRecommendation(BaseModel):
-    """A restaurant recommendation for a given day."""
-
-    name: str
-    cuisine: str
-    price_level: str
-    rating: float
-    latitude: float
-    longitude: float
-    image_url: str | None = None
-    origin: str | None = Field(None, description="'user' or 'ai' - source of this restaurant")
+# --- Slot / Meal Models ---
 
 
 class ActivitySlot(BaseModel):
@@ -84,12 +66,29 @@ class ActivitySlot(BaseModel):
     tag: str | None = None
 
 
+class MealSlot(BaseModel):
+    """A meal entry within a day's itinerary (Req 5.4, 13.3)."""
+
+    meal_type: str = Field(..., description="Breakfast, Lunch, or Dinner")
+    restaurant_name: str
+    cuisine: str
+    price_level: str
+    latitude: float
+    longitude: float
+    estimated_cost_usd: float = 0.0
+    place_id: str | None = None
+    is_estimated: bool = True
+
+
+# --- Day / Response Models ---
+
+
 class ItineraryDay(BaseModel):
     """One day of the itinerary."""
 
     day_number: int
     slots: list[ActivitySlot]
-    restaurant: RestaurantRecommendation | None = None
+    meals: list[MealSlot] = Field(default_factory=list)
 
 
 class ItineraryResponse(BaseModel):
@@ -97,6 +96,13 @@ class ItineraryResponse(BaseModel):
 
     destination: str
     num_days: int
-    vibe: str
+    vibes: list[str]
+    budget_tier: str
     days: list[ItineraryDay]
     reasoning_text: str | None = None
+
+
+class ReplaceSuggestionsResponse(BaseModel):
+    """Response for replace-item endpoint with multiple suggestions (Req 14.1)."""
+
+    suggestions: list[Union[ActivitySlot, MealSlot]]

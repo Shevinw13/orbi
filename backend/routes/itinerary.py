@@ -9,10 +9,10 @@ from fastapi import APIRouter, HTTPException
 
 from backend.models.auth import ErrorResponse
 from backend.models.itinerary import (
-    ActivitySlot,
     ItineraryRequest,
     ItineraryResponse,
     ReplaceActivityRequest,
+    ReplaceSuggestionsResponse,
 )
 from backend.services.itinerary import generate_itinerary, replace_activity
 
@@ -38,16 +38,16 @@ async def post_generate_itinerary(body: ItineraryRequest):
 
 @router.post(
     "/replace-item",
-    response_model=ActivitySlot,
+    response_model=ReplaceSuggestionsResponse,
     responses={500: {"model": ErrorResponse}},
 )
 async def post_replace_activity(body: ReplaceActivityRequest):
-    """Replace an itinerary activity with an AI-generated alternative (Req 5.5)."""
+    """Replace an itinerary item with AI-generated alternatives (Req 5.5, 14.1)."""
     try:
-        activity = await replace_activity(body)
-        return activity
+        suggestions = await replace_activity(body)
+        return suggestions
     except RuntimeError as exc:
         raise HTTPException(
             status_code=500,
-            detail={"error": "activity_replacement_failed", "message": str(exc)},
+            detail={"error": "replacement_failed", "message": str(exc)},
         )

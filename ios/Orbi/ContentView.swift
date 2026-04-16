@@ -8,7 +8,6 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            // Selected tab content (fullscreen)
             switch selectedTab {
             case .explore:
                 ExploreTab()
@@ -18,7 +17,6 @@ struct ContentView: View {
                 ProfileTab(authService: authService, selectedTab: $selectedTab)
             }
 
-            // Floating tab bar at bottom
             VStack {
                 Spacer()
                 FloatingTabBar(selectedTab: $selectedTab)
@@ -85,20 +83,18 @@ struct ExploreTab: View {
         ZStack {
             GlobeView(selectedCity: $selectedCity, userLocation: locationManager.currentLocation)
                 .ignoresSafeArea()
-                .padding(.top, UIScreen.main.bounds.height * 0.12) // Task 17.3: reduce globe height ~12%
+                .padding(.top, UIScreen.main.bounds.height * 0.12)
 
             VStack(spacing: 0) {
                 if !networkMonitor.isConnected { OfflineBannerView() }
                 if flowState == .browsing || flowState == .citySelected {
                     VStack(spacing: 6) {
-                        // Task 17.3: Guidance text above search bar
                         Text("Where do you want to go?")
                             .font(.subheadline)
                             .foregroundStyle(DesignTokens.textSecondary)
                             .lineLimit(1)
                             .opacity(isSearchFocused ? 0 : 1)
                             .animation(.easeInOut(duration: 0.2), value: isSearchFocused)
-
                         SearchBarView(selectedCity: $selectedCity)
                     }
                     .padding(.top, 8)
@@ -141,9 +137,8 @@ struct ExploreTab: View {
                 case .generating:
                     GeneratingOverlay(cityName: selectedCity?.name ?? "")
                         .transition(.opacity)
-
                 case .tripResult:
-                    EmptyView() // Handled by fullScreenCover below
+                    EmptyView()
                 }
             }
             .animation(.easeInOut(duration: 0.3), value: networkMonitor.isConnected)
@@ -169,10 +164,8 @@ struct ExploreTab: View {
                 TripResultView(
                     itinerary: itinerary,
                     city: city,
-                    hotelPriceRange: vm.hotelPriceRange.rawValue,
-                    hotelVibe: vm.hotelVibe == .none ? nil : vm.hotelVibe.rawValue,
-                    restaurantPriceRange: vm.restaurantPriceRange.rawValue,
-                    cuisineType: vm.cuisineType.isEmpty ? nil : vm.cuisineType
+                    vibes: vm.selectedVibes.map(\.rawValue),
+                    budgetTier: vm.selectedBudgetTier.apiValue
                 )
             }
         }
@@ -188,8 +181,7 @@ class PrefsViewModelHolder: ObservableObject {
     var vm: TripPreferencesViewModel?
 }
 
-
-// MARK: - City Card (Glassmorphic Dark Theme — ~30% sheet)
+// MARK: - City Card (Glassmorphic Dark Theme)
 
 struct CityCardView: View {
     let city: CityMarker
@@ -200,7 +192,6 @@ struct CityCardView: View {
 
     var body: some View {
         VStack(spacing: DesignTokens.spacingMD) {
-            // Dismiss button
             HStack {
                 Spacer()
                 Button(action: onDismiss) {
@@ -213,7 +204,6 @@ struct CityCardView: View {
                 }
             }
 
-            // Hero image from Wikipedia
             ZStack {
                 RoundedRectangle(cornerRadius: DesignTokens.radiusMD)
                     .fill(
@@ -239,8 +229,7 @@ struct CityCardView: View {
                                 .frame(height: 140)
                                 .clipShape(RoundedRectangle(cornerRadius: DesignTokens.radiusMD))
                         default:
-                            ProgressView()
-                                .tint(DesignTokens.accentCyan)
+                            ProgressView().tint(DesignTokens.accentCyan)
                         }
                     }
                 } else {
@@ -252,33 +241,22 @@ struct CityCardView: View {
             .frame(height: 140)
             .clipShape(RoundedRectangle(cornerRadius: DesignTokens.radiusMD))
 
-            // City name
             Text(city.name)
                 .font(.title2.weight(.bold))
                 .foregroundStyle(DesignTokens.textPrimary)
 
-            // Rating + country label
             HStack(spacing: DesignTokens.spacingSM) {
                 HStack(spacing: 3) {
-                    Image(systemName: "star.fill")
-                        .foregroundStyle(.yellow)
-                    Text("4.8")
-                        .fontWeight(.semibold)
-                        .foregroundStyle(DesignTokens.textPrimary)
+                    Image(systemName: "star.fill").foregroundStyle(.yellow)
+                    Text("4.8").fontWeight(.semibold).foregroundStyle(DesignTokens.textPrimary)
                 }
                 .font(.subheadline)
-
-                Text("·")
-                    .foregroundStyle(DesignTokens.textSecondary)
-                Text(city.name)
-                    .foregroundStyle(DesignTokens.textSecondary)
-                    .font(.subheadline)
+                Text("·").foregroundStyle(DesignTokens.textSecondary)
+                Text(city.name).foregroundStyle(DesignTokens.textSecondary).font(.subheadline)
             }
 
-            // Destination Insights (Req 17.5)
             DestinationInsightsView(latitude: city.latitude, longitude: city.longitude)
 
-            // Plan Trip button with accent gradient
             Button(action: onPlanTrip) {
                 Text("Plan Trip")
                     .font(.headline)
@@ -293,54 +271,36 @@ struct CityCardView: View {
         .padding(22)
         .glassmorphic(cornerRadius: DesignTokens.radiusXL)
         .shadow(color: Color.black.opacity(0.4), radius: 20, y: 8)
-        .task {
-            await loadCityImage()
-        }
+        .task { await loadCityImage() }
     }
 
-    // Fetch city image from Wikipedia REST API (free, no key needed)
-    // Tries the city name directly, then with "_city" suffix for better matches
     private func loadCityImage() async {
-        let searchTerms = [
-            city.name,
-            "\(city.name) city",
-            "\(city.name)_(city)",
-        ]
-
+        let searchTerms = [city.name, "\(city.name) city", "\(city.name)_(city)"]
         for term in searchTerms {
-            let encoded = term
-                .replacingOccurrences(of: " ", with: "_")
+            let encoded = term.replacingOccurrences(of: " ", with: "_")
                 .addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? term
             guard let url = URL(string: "https://en.wikipedia.org/api/rest_v1/page/summary/\(encoded)") else { continue }
-
             do {
                 let (data, response) = try await URLSession.shared.data(from: url)
                 guard let httpResp = response as? HTTPURLResponse, httpResp.statusCode == 200 else { continue }
-
                 if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                    let originalImage = json["originalimage"] as? [String: Any],
                    let source = originalImage["source"] as? String,
                    let imgURL = URL(string: source) {
-                    imageURL = imgURL
-                    return
+                    imageURL = imgURL; return
                 }
-                // Fallback to thumbnail if no originalimage
                 if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                    let thumbnail = json["thumbnail"] as? [String: Any],
                    let source = thumbnail["source"] as? String,
                    let imgURL = URL(string: source) {
-                    imageURL = imgURL
-                    return
+                    imageURL = imgURL; return
                 }
-            } catch {
-                continue
-            }
+            } catch { continue }
         }
     }
 }
 
-
-// MARK: - Preferences Overlay (Glassmorphic Dark Theme — ~80% sheet)
+// MARK: - Preferences Overlay
 
 struct PreferencesOverlay: View {
     @ObservedObject var viewModel: TripPreferencesViewModel
@@ -352,218 +312,213 @@ struct PreferencesOverlay: View {
         VStack(spacing: 0) {
             Spacer()
             ScrollView {
-            VStack(spacing: 18) {
-                // Back button
-                HStack {
-                    Button(action: onClose) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "chevron.left")
-                            Text("Back")
-                        }
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(DesignTokens.accentCyan)
-                    }
-                    Spacer()
-                }
-
-                // City header
-                VStack(spacing: DesignTokens.spacingSM) {
-                    ZStack {
-                        Circle()
-                            .fill(
-                                LinearGradient(
-                                    colors: [DesignTokens.accentCyan.opacity(0.15), DesignTokens.accentBlue.opacity(0.08)],
-                                    startPoint: .top, endPoint: .bottom
-                                )
-                            )
-                            .frame(width: 60, height: 60)
-                        Image(systemName: "mappin.circle.fill")
-                            .font(.system(size: 34))
-                            .foregroundStyle(DesignTokens.accentCyan)
-                    }
-                    Text(viewModel.city.name)
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(DesignTokens.textPrimary)
-                    Text("Plan a trip to \(viewModel.city.name)?")
-                        .font(.subheadline)
-                        .foregroundStyle(DesignTokens.textSecondary)
-                }
-
-                // Settings rows
-                VStack(spacing: 0) {
-                    settingsRow(label: "Trip Length") {
-                        HStack(spacing: 4) {
-                            TextField("5", text: $viewModel.daysText)
-                                .keyboardType(.numberPad)
-                                .multilineTextAlignment(.trailing)
-                                .frame(width: 28)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(DesignTokens.textPrimary)
-                            Text("Days")
-                                .foregroundStyle(DesignTokens.textSecondary)
-                            Image(systemName: "chevron.right")
-                                .font(.caption2)
-                                .foregroundStyle(DesignTokens.textTertiary)
-                        }
-                    }
-                    Divider()
-                        .overlay(DesignTokens.surfaceGlassBorder)
-                        .padding(.leading, DesignTokens.spacingMD)
-                    settingsRow(label: "Hotel Preferences") {
-                        HStack(spacing: 4) {
-                            Text(viewModel.hotelPriceRange.rawValue)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(DesignTokens.textPrimary)
-                            Image(systemName: "chevron.right")
-                                .font(.caption2)
-                                .foregroundStyle(DesignTokens.textTertiary)
-                        }
-                    }
-                }
-                .background(Color.white.opacity(0.05))
-                .clipShape(RoundedRectangle(cornerRadius: DesignTokens.radiusSM))
-                .overlay(
-                    RoundedRectangle(cornerRadius: DesignTokens.radiusSM)
-                        .stroke(DesignTokens.surfaceGlassBorder, lineWidth: 0.5)
-                )
-
-                // Hotel price pills
-                HStack(spacing: DesignTokens.spacingSM) {
-                    ForEach(PriceRange.allCases) { range in
-                        let isSelected = viewModel.hotelPriceRange == range
-                        Text(range.rawValue)
+                VStack(spacing: 18) {
+                    HStack {
+                        Button(action: onClose) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "chevron.left")
+                                Text("Back")
+                            }
                             .font(.subheadline.weight(.medium))
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(
-                                Group {
-                                    if isSelected {
-                                        Capsule().fill(DesignTokens.accentGradient)
-                                    } else {
-                                        Capsule().stroke(DesignTokens.surfaceGlassBorder, lineWidth: 1)
-                                    }
-                                }
-                            )
-                            .foregroundStyle(isSelected ? .white : DesignTokens.textSecondary)
-                            .clipShape(Capsule())
-                            .onTapGesture { viewModel.hotelPriceRange = range }
-                    }
-                }
-
-                // Vibe pills
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Vibe")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(DesignTokens.textSecondary)
-                    HStack(spacing: 6) {
-                        ForEach(TripVibe.allCases) { vibe in
-                            vibePill(vibe)
-                        }
-                    }
-                }
-
-                // Restaurant Selector (Req 1.1)
-                if let selectorVM = viewModel.restaurantSelectorVM {
-                    RestaurantSelector(
-                        viewModel: selectorVM,
-                        selectedIds: $viewModel.selectedRestaurantIds,
-                        maxSelections: 3
-                    )
-                    .task {
-                        if selectorVM.restaurants.isEmpty {
-                            await selectorVM.loadRestaurants()
-                        }
-                    }
-                }
-
-                // Family Friendly toggle
-                Toggle(isOn: $viewModel.familyFriendly) {
-                    HStack(spacing: DesignTokens.spacingSM) {
-                        Image(systemName: "figure.and.child.holdinghands")
                             .foregroundStyle(DesignTokens.accentCyan)
-                        Text("Family Friendly")
-                            .font(.subheadline.weight(.medium))
+                        }
+                        Spacer()
+                    }
+
+                    // City header
+                    VStack(spacing: DesignTokens.spacingSM) {
+                        ZStack {
+                            Circle()
+                                .fill(LinearGradient(colors: [DesignTokens.accentCyan.opacity(0.15), DesignTokens.accentBlue.opacity(0.08)], startPoint: .top, endPoint: .bottom))
+                                .frame(width: 60, height: 60)
+                            Image(systemName: "mappin.circle.fill")
+                                .font(.system(size: 34))
+                                .foregroundStyle(DesignTokens.accentCyan)
+                        }
+                        Text(viewModel.city.name)
+                            .font(.title3.weight(.bold))
                             .foregroundStyle(DesignTokens.textPrimary)
+                        Text("Plan a trip to \(viewModel.city.name)?")
+                            .font(.subheadline)
+                            .foregroundStyle(DesignTokens.textSecondary)
                     }
-                }
-                .tint(DesignTokens.accentCyan)
-                .padding(.horizontal, DesignTokens.spacingMD)
 
-                // Generate Itinerary button — full-width accent gradient
-                Button {
-                    Task {
-                        onGenerate()
-                        await viewModel.submit()
-                        if viewModel.generatedItinerary != nil {
-                            onItineraryReady()
+                    // Trip Length
+                    VStack(spacing: 0) {
+                        settingsRow(label: "Trip Length") {
+                            HStack(spacing: 4) {
+                                TextField("5", text: $viewModel.daysText)
+                                    .keyboardType(.numberPad)
+                                    .multilineTextAlignment(.trailing)
+                                    .frame(width: 28)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(DesignTokens.textPrimary)
+                                Text("Days").foregroundStyle(DesignTokens.textSecondary)
+                                Image(systemName: "chevron.right").font(.caption2).foregroundStyle(DesignTokens.textTertiary)
+                            }
                         }
                     }
-                } label: {
-                    HStack(spacing: DesignTokens.spacingSM) {
-                        Image(systemName: "sparkles")
-                        Text("Generate Itinerary").fontWeight(.semibold)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 15)
-                    .background(DesignTokens.accentGradient)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: DesignTokens.radiusMD))
-                    .shadow(color: DesignTokens.accentCyan.opacity(0.3), radius: 8, y: 4)
-                }
+                    .background(Color.white.opacity(0.05))
+                    .clipShape(RoundedRectangle(cornerRadius: DesignTokens.radiusSM))
+                    .overlay(RoundedRectangle(cornerRadius: DesignTokens.radiusSM).stroke(DesignTokens.surfaceGlassBorder, lineWidth: 0.5))
 
-                HStack(spacing: DesignTokens.spacingXS) {
-                    Image(systemName: "sparkles").font(.caption2)
-                    Text("Our travel experts are crafting your perfect itinerary").font(.caption)
+                    // Budget Tier
+                    budgetTierSection
+
+                    // Vibe pills (multi-select)
+                    vibeSection
+
+                    // Family Friendly toggle
+                    Toggle(isOn: $viewModel.familyFriendly) {
+                        HStack(spacing: DesignTokens.spacingSM) {
+                            Image(systemName: "figure.and.child.holdinghands")
+                                .foregroundStyle(DesignTokens.accentCyan)
+                            Text("Family Friendly")
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(DesignTokens.textPrimary)
+                        }
+                    }
+                    .tint(DesignTokens.accentCyan)
+                    .padding(.horizontal, DesignTokens.spacingMD)
+
+                    // Generate button
+                    Button {
+                        Task {
+                            onGenerate()
+                            await viewModel.submit()
+                            if viewModel.generatedItinerary != nil {
+                                onItineraryReady()
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: DesignTokens.spacingSM) {
+                            Image(systemName: "sparkles")
+                            Text("Generate Itinerary").fontWeight(.semibold)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 15)
+                        .background(DesignTokens.accentGradient)
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.radiusMD))
+                        .shadow(color: DesignTokens.accentCyan.opacity(0.3), radius: 8, y: 4)
+                    }
+                    .disabled(!viewModel.canSubmit)
+                    .opacity(viewModel.canSubmit ? 1 : 0.5)
+
+                    HStack(spacing: DesignTokens.spacingXS) {
+                        Image(systemName: "sparkles").font(.caption2)
+                        Text("Our travel experts are crafting your perfect itinerary").font(.caption)
+                    }
+                    .foregroundStyle(DesignTokens.textSecondary)
                 }
-                .foregroundStyle(DesignTokens.textSecondary)
+                .padding(22)
+                .glassmorphic(cornerRadius: DesignTokens.radiusXL)
+                .padding(.horizontal, 10)
             }
-            .padding(22)
-            .glassmorphic(cornerRadius: DesignTokens.radiusXL)
-            .padding(.horizontal, 10)
-            } // ScrollView
             .padding(.bottom, DesignTokens.tabBarHeight + DesignTokens.spacingSM)
         }
     }
 
-    // MARK: - Settings Row
+    // MARK: - Budget Tier Section
+
+    private var budgetTierSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Budget Tier")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(DesignTokens.textSecondary)
+
+            HStack(spacing: DesignTokens.spacingSM) {
+                ForEach(BudgetTier.allCases) { tier in
+                    let isSelected = viewModel.selectedBudgetTier == tier
+                    Text(tier.apiValue)
+                        .font(.subheadline.weight(.medium))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(
+                            Group {
+                                if isSelected {
+                                    Capsule().fill(DesignTokens.accentGradient)
+                                } else {
+                                    Capsule().stroke(DesignTokens.surfaceGlassBorder, lineWidth: 1)
+                                }
+                            }
+                        )
+                        .foregroundStyle(isSelected ? .white : DesignTokens.textSecondary)
+                        .clipShape(Capsule())
+                        .onTapGesture { viewModel.selectedBudgetTier = tier }
+                }
+            }
+
+            Text(viewModel.selectedBudgetTier.label)
+                .font(.caption)
+                .foregroundStyle(DesignTokens.accentCyan)
+        }
+    }
+
+    // MARK: - Vibe Section (multi-select)
+
+    private var vibeSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Vibe")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(DesignTokens.textSecondary)
+                if viewModel.selectedVibes.isEmpty {
+                    Text("(select at least one)")
+                        .font(.caption2)
+                        .foregroundStyle(.red.opacity(0.8))
+                }
+            }
+            HStack(spacing: 6) {
+                ForEach(TripVibe.allCases) { vibe in
+                    vibePill(vibe)
+                }
+            }
+        }
+    }
+
+    private func vibePill(_ vibe: TripVibe) -> some View {
+        let isSelected = viewModel.selectedVibes.contains(vibe)
+        return HStack(spacing: 4) {
+            Image(systemName: vibe.icon).font(.caption2)
+            Text(vibe.rawValue)
+        }
+        .font(.caption.weight(.semibold))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(
+            Group {
+                if isSelected {
+                    Capsule().fill(DesignTokens.accentGradient)
+                } else {
+                    Capsule().stroke(DesignTokens.surfaceGlassBorder, lineWidth: 1)
+                }
+            }
+        )
+        .foregroundStyle(isSelected ? .white : DesignTokens.textSecondary)
+        .clipShape(Capsule())
+        .shadow(color: isSelected ? DesignTokens.accentCyan.opacity(0.3) : .clear, radius: 4, y: 2)
+        .onTapGesture {
+            if isSelected {
+                viewModel.selectedVibes.remove(vibe)
+            } else {
+                viewModel.selectedVibes.insert(vibe)
+            }
+        }
+    }
 
     private func settingsRow<Content: View>(label: String, @ViewBuilder content: () -> Content) -> some View {
         HStack {
-            Text(label)
-                .font(.subheadline)
-                .foregroundStyle(DesignTokens.textPrimary)
+            Text(label).font(.subheadline).foregroundStyle(DesignTokens.textPrimary)
             Spacer()
             content().font(.subheadline)
         }
         .padding(.horizontal, DesignTokens.spacingMD)
         .padding(.vertical, 14)
     }
-
-    // MARK: - Vibe Pill
-
-    private func vibePill(_ vibe: TripVibe) -> some View {
-        let isSelected = viewModel.selectedVibe == vibe
-        return Text(vibe.rawValue)
-            .font(.caption.weight(.semibold))
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .background(
-                Group {
-                    if isSelected {
-                        Capsule().fill(DesignTokens.accentGradient)
-                    } else {
-                        Capsule().stroke(DesignTokens.surfaceGlassBorder, lineWidth: 1)
-                    }
-                }
-            )
-            .foregroundStyle(isSelected ? .white : DesignTokens.textSecondary)
-            .clipShape(Capsule())
-            .onTapGesture { viewModel.selectedVibe = vibe }
-    }
 }
 
-
-// MARK: - Generating Overlay (Translucent dark + glow pulse)
+// MARK: - Generating Overlay
 
 struct GeneratingOverlay: View {
     let cityName: String
@@ -578,64 +533,35 @@ struct GeneratingOverlay: View {
 
     var body: some View {
         ZStack {
-            // Translucent dark background — globe remains visible
-            Color.black.opacity(0.5)
-                .ignoresSafeArea()
-
+            Color.black.opacity(0.5).ignoresSafeArea()
             VStack(spacing: DesignTokens.spacingLG) {
                 Spacer()
-
-                // Pulsing glow circle
                 ZStack {
                     Circle()
-                        .fill(
-                            RadialGradient(
-                                colors: [DesignTokens.accentCyan.opacity(0.6), Color.clear],
-                                center: .center,
-                                startRadius: 10,
-                                endRadius: 80
-                            )
-                        )
+                        .fill(RadialGradient(colors: [DesignTokens.accentCyan.opacity(0.6), Color.clear], center: .center, startRadius: 10, endRadius: 80))
                         .frame(width: 160, height: 160)
                         .opacity(glowOpacity)
-
                     Image(systemName: "mappin.circle.fill")
                         .font(.system(size: 44))
                         .foregroundStyle(DesignTokens.accentCyan)
                 }
-
-                // City name
-                Text(cityName)
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(DesignTokens.textPrimary)
-                    .padding(.horizontal, 16)
-
-                // Staged generating text
+                Text(cityName).font(.title3.weight(.bold)).foregroundStyle(DesignTokens.textPrimary).padding(.horizontal, 16)
                 Text(stagedMessages[messageIndex])
                     .font(.title.weight(.bold))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(DesignTokens.textPrimary)
                     .padding(.horizontal, 16)
                     .animation(.easeInOut(duration: 0.3), value: messageIndex)
-
                 Text("Our travel professionals are planning your perfect trip")
                     .font(.subheadline)
                     .foregroundStyle(DesignTokens.textSecondary)
                     .padding(.horizontal, 16)
-
-                // Cyan-tinted ProgressView
-                ProgressView()
-                    .tint(DesignTokens.accentCyan)
-                    .scaleEffect(1.3)
-                    .padding(.top, DesignTokens.spacingXS)
-
+                ProgressView().tint(DesignTokens.accentCyan).scaleEffect(1.3).padding(.top, DesignTokens.spacingXS)
                 Spacer()
             }
         }
         .onAppear {
-            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
-                glowOpacity = 0.8
-            }
+            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) { glowOpacity = 0.8 }
         }
         .task {
             while !Task.isCancelled {
@@ -654,15 +580,11 @@ struct SavedTripsTab: View {
     @Binding var selectedTab: AppTab
 
     var body: some View {
-        ZStack {
-            DesignTokens.backgroundPrimary.ignoresSafeArea()
-        }
-        .onAppear { showTrips = true }
-        .sheet(isPresented: $showTrips) {
-            SavedTripsView(onPlanTrip: {
-                selectedTab = .explore
-            })
-        }
+        ZStack { DesignTokens.backgroundPrimary.ignoresSafeArea() }
+            .onAppear { showTrips = true }
+            .sheet(isPresented: $showTrips) {
+                SavedTripsView(onPlanTrip: { selectedTab = .explore })
+            }
     }
 }
 
@@ -675,34 +597,17 @@ struct ProfileTab: View {
             List {
                 Section {
                     HStack(spacing: 14) {
-                        Image(systemName: "person.circle.fill")
-                            .font(.system(size: 48))
-                            .foregroundStyle(DesignTokens.accentCyan)
-                        Text(authService.displayName ?? authService.userId ?? "User")
-                            .font(.headline)
-                            .foregroundStyle(DesignTokens.textPrimary)
+                        Image(systemName: "person.circle.fill").font(.system(size: 48)).foregroundStyle(DesignTokens.accentCyan)
+                        Text(authService.displayName ?? authService.userId ?? "User").font(.headline).foregroundStyle(DesignTokens.textPrimary)
                     }
                     .padding(.vertical, 8)
                 }
                 Section {
-                    NavigationLink {
-                        SavedTripsView(onPlanTrip: {
-                            selectedTab = .explore
-                        })
-                    } label: {
-                        Label("Saved Trips", systemImage: "suitcase")
-                    }
-                    Button {
-                        selectedTab = .trips
-                    } label: {
-                        Label("My Trips", systemImage: "map")
-                            .foregroundStyle(DesignTokens.textPrimary)
-                    }
+                    NavigationLink { SavedTripsView(onPlanTrip: { selectedTab = .explore }) } label: { Label("Saved Trips", systemImage: "suitcase") }
+                    Button { selectedTab = .trips } label: { Label("My Trips", systemImage: "map").foregroundStyle(DesignTokens.textPrimary) }
                 }
                 Section {
-                    Button(role: .destructive) { authService.signOut() } label: {
-                        Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
-                    }
+                    Button(role: .destructive) { authService.signOut() } label: { Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right") }
                 }
             }
             .navigationTitle("Profile")
@@ -725,8 +630,6 @@ private struct OfflineBannerView: View {
         .background(Color.red.opacity(0.8))
     }
 }
-
-// MARK: - Hashable Conformance for AppTab
 
 extension AppTab: Hashable {}
 

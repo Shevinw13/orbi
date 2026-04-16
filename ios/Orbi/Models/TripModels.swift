@@ -1,30 +1,74 @@
 import Foundation
 
+// MARK: - Budget Tier
+
+/// Unified 5-tier budget selector replacing PriceRange + HotelVibe.
+/// Validates: Requirements 2.1, 2.2, 2.3
+enum BudgetTier: String, CaseIterable, Identifiable, Codable {
+    case budget = "budget"
+    case casual = "casual"
+    case comfortable = "comfortable"
+    case premium = "premium"
+    case luxury = "luxury"
+
+    var id: String { rawValue }
+
+    /// Dollar-sign display string sent to the API.
+    var apiValue: String {
+        switch self {
+        case .budget: return "$"
+        case .casual: return "$$"
+        case .comfortable: return "$$$"
+        case .premium: return "$$$$"
+        case .luxury: return "$$$$$"
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .budget: return "Budget"
+        case .casual: return "Casual"
+        case .comfortable: return "Comfortable"
+        case .premium: return "Premium"
+        case .luxury: return "Luxury"
+        }
+    }
+}
+
+// MARK: - Meal Slot
+
+/// A meal entry (Breakfast, Lunch, or Dinner) placed within a time block.
+/// Validates: Requirements 5.4, 13.3
+struct MealSlot: Codable, Identifiable, Equatable {
+    var mealType: String
+    var restaurantName: String
+    var cuisine: String
+    var priceLevel: String
+    var latitude: Double
+    var longitude: Double
+    var estimatedCostUsd: Double?
+    var placeId: String?
+    var isEstimated: Bool
+
+    var id: String { "\(mealType)-\(restaurantName)" }
+
+    static func == (lhs: MealSlot, rhs: MealSlot) -> Bool {
+        lhs.mealType == rhs.mealType && lhs.restaurantName == rhs.restaurantName
+    }
+}
+
 // MARK: - Trip Preferences Request
 
 /// Preferences payload sent to `POST /trips/generate`.
-/// Validates: Requirements 3.1, 3.4, 3.5
+/// Validates: Requirements 2.5, 3.6
 struct TripPreferencesRequest: Encodable {
     let destination: String
     let latitude: Double
     let longitude: Double
     let numDays: Int
-    let hotelPriceRange: String
-    let hotelVibe: String?
-    let restaurantPriceRange: String
-    let cuisineType: String?
-    let vibe: String
+    let budgetTier: String
+    let vibes: [String]
     let familyFriendly: Bool
-    let selectedRestaurants: [SelectedRestaurantPayload]?
-}
-
-/// Payload for a user-selected restaurant sent to the backend.
-struct SelectedRestaurantPayload: Encodable {
-    let name: String
-    let cuisine: String
-    let priceLevel: String
-    let latitude: Double
-    let longitude: Double
 }
 
 // MARK: - Itinerary Response
@@ -33,17 +77,77 @@ struct SelectedRestaurantPayload: Encodable {
 struct ItineraryResponse: Codable {
     let destination: String
     let numDays: Int
-    let vibe: String
+    let vibes: [String]
+    let budgetTier: String
     var days: [ItineraryDay]
     var reasoningText: String?
+}
+
+/// Represents a single item in a time block — either an activity or a meal.
+enum TimeBlockItem: Identifiable {
+    case activity(ItinerarySlot)
+    case meal(MealSlot)
+
+    var id: String {
+        switch self {
+        case .activity(let slot): return "activity-\(slot.id)"
+        case .meal(let meal): return "meal-\(meal.id)"
+        }
+    }
+
+    /// The time block this item belongs to (Morning, Afternoon, Evening).
+    var timeBlock: String {
+        switch self {
+        case .activity(let slot): return slot.timeSlot
+        case .meal(let meal):
+            switch meal.mealType.lowercased() {
+            case "breakfast": return "Morning"
+            case "lunch": return "Afternoon"
+            case "dinner": return "Evening"
+            default: return "Morning"
+            }
+        }
+    }
+
+    /// Sort order: Morning=0, Afternoon=1, Evening=2. Within a block, activities before meals.
+    var sortOrder: Int {
+        let blockOrder: Int
+        switch timeBlock.lowercased() {
+        case "morning": blockOrder = 0
+        case "afternoon": blockOrder = 1
+        case "evening": blockOrder = 2
+        default: blockOrder = 3
+        }
+        // Activities sort before meals within the same block
+        let typeOrder: Int
+        switch self {
+        case .activity: typeOrder = 0
+        case .meal: typeOrder = 1
+        }
+        return blockOrder * 10 + typeOrder
+    }
 }
 
 struct ItineraryDay: Codable, Identifiable {
     let dayNumber: Int
     var slots: [ItinerarySlot]
-    let restaurant: ItineraryRestaurant?
+    var meals: [MealSlot]
 
     var id: Int { dayNumber }
+
+    /// All items merged in chronological order (Morning → Afternoon → Evening; activities then meals within each block).
+    var timeBlockItems: [TimeBlockItem] {
+        var items: [TimeBlockItem] = []
+        items.append(contentsOf: slots.map { .activity($0) })
+        items.append(contentsOf: meals.map { .meal($0) })
+        return items.sorted { $0.sortOrder < $1.sortOrder }
+    }
+
+    init(dayNumber: Int, slots: [ItinerarySlot], meals: [MealSlot] = []) {
+        self.dayNumber = dayNumber
+        self.slots = slots
+        self.meals = meals
+    }
 }
 
 struct ItinerarySlot: Codable, Identifiable, Equatable {
@@ -64,6 +168,7 @@ struct ItinerarySlot: Codable, Identifiable, Equatable {
     }
 }
 
+/// Kept for backward compatibility with saved trips that may still have this field.
 struct ItineraryRestaurant: Codable {
     let name: String
     let cuisine: String
@@ -78,24 +183,39 @@ struct ItineraryRestaurant: Codable {
 // MARK: - Replace Activity
 
 /// Request body for `POST /trips/replace-item`.
-/// Validates: Requirement 5.5, 11.1, 11.2, 11.3, 11.4
+/// Validates: Requirement 6.2, 14.1, 14.2
 struct ReplaceActivityRequest: Encodable {
     let destination: String
     let dayNumber: Int
     let timeSlot: String
-    let currentActivityName: String
+    let itemType: String
+    let currentItemName: String
     let existingActivities: [String]
-    let vibe: String
+    let vibes: [String]
+    let budgetTier: String
     let adjacentActivityCoords: [[String: Double]]?
+    let numSuggestions: Int
+}
+
+/// Response from `POST /trips/replace-item` with multiple suggestions.
+struct ReplaceSuggestionsResponse: Codable {
+    let suggestions: [ItinerarySlot]
+}
+
+/// Response for meal replacement suggestions.
+struct MealReplaceSuggestionsResponse: Codable {
+    let suggestions: [MealSlot]
 }
 
 // MARK: - Cost Breakdown
 
 /// Cost breakdown returned by the Cost_Estimator.
-/// Validates: Requirements 8.1, 8.2, 8.3, 8.4
+/// Validates: Requirements 8.1, 8.2, 8.3, 8.4, 9.3
 struct CostBreakdown: Codable {
     let hotelTotal: Double
+    let hotelIsEstimated: Bool?
     let foodTotal: Double
+    let foodIsEstimated: Bool?
     let activitiesTotal: Double
     let total: Double
     let perDay: [DayCost]
@@ -104,7 +224,9 @@ struct CostBreakdown: Codable {
 struct DayCost: Codable, Identifiable {
     let day: Int
     let hotel: Double
+    let hotelIsEstimated: Bool?
     let food: Double
+    let foodIsEstimated: Bool?
     let activities: Double
     let subtotal: Double
 
@@ -123,7 +245,6 @@ struct PlaceRecommendation: Codable, Identifiable, Equatable {
     let imageUrl: String?
     let latitude: Double
     let longitude: Double
-    // New optional fields (Req 15, 16, 19.5)
     let ratingSource: String?
     let reviewCount: Int?
     let priceRangeMin: Double?
@@ -131,7 +252,6 @@ struct PlaceRecommendation: Codable, Identifiable, Equatable {
 
     var id: String { placeId }
 
-    // Custom init for backward compatibility — all new fields default to nil
     init(placeId: String, name: String, rating: Double, priceLevel: String, imageUrl: String?, latitude: Double, longitude: Double, ratingSource: String? = nil, reviewCount: Int? = nil, priceRangeMin: Double? = nil, priceRangeMax: Double? = nil) {
         self.placeId = placeId
         self.name = name
@@ -146,10 +266,6 @@ struct PlaceRecommendation: Codable, Identifiable, Equatable {
         self.priceRangeMax = priceRangeMax
     }
 
-    // MARK: - Pricing Format Helpers (Req 5, 6)
-
-    /// Maps a priceLevel string to a tier index: 1 (budget), 2 (mid-range), 3 (premium).
-    /// "$" → 1, "$$" → 2, "$$$" or more → 3. Defaults to 2 if unrecognized.
     private var priceTier: Int {
         let dollarCount = priceLevel.filter { $0 == "$" }.count
         if dollarCount <= 1 { return 1 }
@@ -157,9 +273,6 @@ struct PlaceRecommendation: Codable, Identifiable, Equatable {
         return 3
     }
 
-    /// Formats hotel pricing as "$XXX / night avg".
-    /// Uses average of priceRangeMin/priceRangeMax when available, else tier fallback.
-    /// Validates: Requirements 5.1, 5.2, 5.3, 5.4
     var formattedHotelPrice: String {
         if let min = priceRangeMin, let max = priceRangeMax, min > 0, max > 0 {
             let avg = Int((min + max) / 2.0)
@@ -174,9 +287,6 @@ struct PlaceRecommendation: Codable, Identifiable, Equatable {
         return "$\(fallback) / night avg"
     }
 
-    /// Formats restaurant pricing as "$XX–$XX per person".
-    /// Uses priceRangeMin/priceRangeMax when available, else tier fallback.
-    /// Validates: Requirements 6.1, 6.2, 6.3, 6.4
     var formattedRestaurantPrice: String {
         if let min = priceRangeMin, let max = priceRangeMax, min > 0, max > 0 {
             return "$\(Int(min))–$\(Int(max)) per person"
@@ -192,8 +302,7 @@ struct PlaceRecommendation: Codable, Identifiable, Equatable {
     }
 }
 
-/// Response wrapper for place recommendations from `GET /places/hotels` and `GET /places/restaurants`.
-/// Validates: Requirements 7.1, 7.2, 7.5
+/// Response wrapper for place recommendations.
 struct PlacesResponse: Codable {
     let results: [PlaceRecommendation]
     let filtersBroadened: Bool
@@ -201,8 +310,6 @@ struct PlacesResponse: Codable {
 
 // MARK: - Trip Save Request
 
-/// Request body for `POST /trips` — save a trip.
-/// Validates: Requirement 9.1
 struct TripSaveRequest: Encodable {
     let destination: String
     let destinationLatLng: String?
@@ -215,7 +322,6 @@ struct TripSaveRequest: Encodable {
     let costBreakdown: [String: AnyCodableValue]?
 }
 
-/// A type-erased Codable value for encoding arbitrary JSON dictionaries.
 enum AnyCodableValue: Codable {
     case string(String)
     case int(Int)
@@ -260,8 +366,6 @@ enum AnyCodableValue: Codable {
     }
 }
 
-/// Full trip response from `GET /trips/{id}` and `POST /trips`.
-/// Validates: Requirements 9.1, 9.3
 struct TripResponse: Codable, Identifiable {
     let id: String
     let userId: String
@@ -278,8 +382,6 @@ struct TripResponse: Codable, Identifiable {
     let updatedAt: String
 }
 
-/// Lightweight trip summary from `GET /trips`.
-/// Validates: Requirement 9.2
 struct TripListItem: Codable, Identifiable {
     let id: String
     let destination: String
@@ -290,22 +392,16 @@ struct TripListItem: Codable, Identifiable {
 
 // MARK: - Share Models
 
-/// Response from `POST /trips/{id}/share`.
-/// Validates: Requirement 10.1
 struct ShareLinkResponse: Codable {
     let shareId: String
     let shareUrl: String
 }
 
-/// Request body for `POST /trips/{id}/share` with optional planner fields.
-/// Validates: Requirement 8.3
 struct ShareCreateBody: Encodable {
     let plannedBy: String?
     let notes: String?
 }
 
-/// Read-only trip data from `GET /share/{share_id}`.
-/// Validates: Requirements 10.2, 10.3, 10.4, 8.1, 8.2
 struct SharedTripResponse: Codable {
     let destination: String
     let destinationLatLng: String?
@@ -321,13 +417,13 @@ struct SharedTripResponse: Codable {
 
 // MARK: - Cost Request
 
-/// Request body for `POST /trips/cost`.
-/// Validates: Requirements 8.1, 8.2, 8.3
 struct CostRequest: Encodable {
     let numDays: Int
     let hotelNightlyRate: Double
     let restaurantPriceRange: String
     let days: [CostRequestDay]
+    let hotelIsEstimated: Bool
+    let foodIsEstimated: Bool
 }
 
 struct CostRequestDay: Encodable {

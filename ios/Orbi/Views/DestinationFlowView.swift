@@ -1,36 +1,6 @@
 import SwiftUI
 import UIKit
 
-// MARK: - Price Range Options
-
-enum PriceRange: String, CaseIterable, Identifiable {
-    case budget = "$"
-    case mid = "$$"
-    case premium = "$$$"
-
-    var id: String { rawValue }
-}
-
-// MARK: - Hotel Vibe Options
-
-enum HotelVibe: String, CaseIterable, Identifiable {
-    case none = ""
-    case luxury = "luxury"
-    case boutique = "boutique"
-    case budget = "budget"
-
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .none: return "No preference"
-        case .luxury: return "Luxury"
-        case .boutique: return "Boutique"
-        case .budget: return "Budget"
-        }
-    }
-}
-
 // MARK: - Trip Vibe Options
 
 enum TripVibe: String, CaseIterable, Identifiable {
@@ -57,11 +27,8 @@ enum TripVibe: String, CaseIterable, Identifiable {
 final class TripPreferencesViewModel: ObservableObject {
 
     @Published var daysText: String = "5"
-    @Published var hotelPriceRange: PriceRange = .premium
-    @Published var hotelVibe: HotelVibe = .none
-    @Published var restaurantPriceRange: PriceRange = .mid
-    @Published var cuisineType: String = ""
-    @Published var selectedVibe: TripVibe = .foodie
+    @Published var selectedBudgetTier: BudgetTier = .comfortable
+    @Published var selectedVibes: Set<TripVibe> = [.foodie]
     @Published var familyFriendly: Bool = false
     @Published var daysError: String?
     @Published var isLoading: Bool = false
@@ -69,25 +36,13 @@ final class TripPreferencesViewModel: ObservableObject {
     @Published var submissionError: String?
     @Published var generatedItinerary: ItineraryResponse?
 
-    /// Selected restaurant IDs for pre-selection
-    @Published var selectedRestaurantIds: Set<String> = []
-
-    /// Recommendations view model for restaurant selector
-    @Published var restaurantSelectorVM: RecommendationsViewModel?
-
-    /// Guards against double-firing haptic feedback (Req 16.4)
+    /// Guards against double-firing haptic feedback
     private var didFireHaptic: Bool = false
 
     let city: CityMarker
 
     init(city: CityMarker) {
         self.city = city
-        let vm = RecommendationsViewModel(
-            latitude: city.latitude,
-            longitude: city.longitude,
-            cityName: city.name
-        )
-        self.restaurantSelectorVM = vm
     }
 
     func validateDays() -> Int? {
@@ -106,6 +61,7 @@ final class TripPreferencesViewModel: ObservableObject {
 
     var canSubmit: Bool {
         guard !isLoading else { return false }
+        guard !selectedVibes.isEmpty else { return false }
         guard let days = Int(daysText.trimmingCharacters(in: .whitespaces)),
               days >= 1, days <= 14 else { return false }
         return true
@@ -116,35 +72,14 @@ final class TripPreferencesViewModel: ObservableObject {
         didFireHaptic = false
         guard let days = validateDays() else { return }
 
-        // Build selected restaurant payloads
-        var restaurantPayloads: [SelectedRestaurantPayload]? = nil
-        if let selectorVM = restaurantSelectorVM, !selectedRestaurantIds.isEmpty {
-            let selected = selectorVM.restaurants.filter { selectedRestaurantIds.contains($0.placeId) }
-            if !selected.isEmpty {
-                restaurantPayloads = selected.map {
-                    SelectedRestaurantPayload(
-                        name: $0.name,
-                        cuisine: "",
-                        priceLevel: $0.priceLevel,
-                        latitude: $0.latitude,
-                        longitude: $0.longitude
-                    )
-                }
-            }
-        }
-
         let request = TripPreferencesRequest(
             destination: city.name,
             latitude: city.latitude,
             longitude: city.longitude,
             numDays: days,
-            hotelPriceRange: hotelPriceRange.rawValue,
-            hotelVibe: hotelVibe == .none ? nil : hotelVibe.rawValue,
-            restaurantPriceRange: restaurantPriceRange.rawValue,
-            cuisineType: cuisineType.isEmpty ? nil : cuisineType,
-            vibe: selectedVibe.rawValue,
-            familyFriendly: familyFriendly,
-            selectedRestaurants: restaurantPayloads
+            budgetTier: selectedBudgetTier.apiValue,
+            vibes: selectedVibes.map(\.rawValue),
+            familyFriendly: familyFriendly
         )
 
         isLoading = true
@@ -157,7 +92,6 @@ final class TripPreferencesViewModel: ObservableObject {
                 .post, path: "/trips/generate", body: request
             )
             generatedItinerary = response
-            // Haptic feedback on successful itinerary generation (Req 16.1)
             if !didFireHaptic {
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
                 didFireHaptic = true
@@ -173,7 +107,7 @@ final class TripPreferencesViewModel: ObservableObject {
     }
 }
 
-// MARK: - Destination Flow View (matches mockup)
+// MARK: - Destination Flow View
 
 struct DestinationFlowView: View {
 
@@ -215,17 +149,15 @@ struct DestinationFlowView: View {
                     TripResultView(
                         itinerary: itinerary,
                         city: city,
-                        hotelPriceRange: viewModel.hotelPriceRange.rawValue,
-                        hotelVibe: viewModel.hotelVibe == .none ? nil : viewModel.hotelVibe.rawValue,
-                        restaurantPriceRange: viewModel.restaurantPriceRange.rawValue,
-                        cuisineType: viewModel.cuisineType.isEmpty ? nil : viewModel.cuisineType
+                        vibes: viewModel.selectedVibes.map(\.rawValue),
+                        budgetTier: viewModel.selectedBudgetTier.apiValue
                     )
                 }
             }
         }
     }
 
-    // MARK: - Preferences Card (mockup style)
+    // MARK: - Preferences Card
 
     private var preferencesCard: some View {
         ScrollView {
@@ -235,10 +167,8 @@ struct DestinationFlowView: View {
                     Image(systemName: "mappin.circle.fill")
                         .font(.system(size: 44))
                         .foregroundStyle(.cyan)
-
                     Text(city.name)
                         .font(.title.weight(.bold))
-
                     Text("Plan a trip to \(city.name)?")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -246,7 +176,6 @@ struct DestinationFlowView: View {
                 .padding(.top, 24)
                 .padding(.bottom, 20)
 
-                // Form fields
                 VStack(spacing: 20) {
                     // Trip Length
                     preferenceRow(label: "Trip Length") {
@@ -271,49 +200,26 @@ struct DestinationFlowView: View {
                             .padding(.horizontal, 20)
                     }
 
-                    // Hotel Preferences
-                    preferenceRow(label: "Hotel Preferences") {
-                        HStack(spacing: 4) {
-                            Text(viewModel.hotelPriceRange.rawValue)
-                                .fontWeight(.semibold)
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                        }
-                    }
+                    Divider().padding(.horizontal, 20)
 
-                    // Hotel price pills
-                    HStack(spacing: 8) {
-                        ForEach(PriceRange.allCases) { range in
-                            pillButton(
-                                title: range.rawValue,
-                                isSelected: viewModel.hotelPriceRange == range
-                            ) {
-                                viewModel.hotelPriceRange = range
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 20)
+                    // Budget Tier
+                    budgetTierSection
 
                     Divider().padding(.horizontal, 20)
 
-                    // Vibe
-                    Text("Vibe")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 20)
+                    // Vibe (multi-select)
+                    vibeSection
 
-                    HStack(spacing: 8) {
-                        ForEach(TripVibe.allCases) { vibe in
-                            pillButton(
-                                title: vibe.rawValue,
-                                isSelected: viewModel.selectedVibe == vibe
-                            ) {
-                                viewModel.selectedVibe = vibe
-                            }
+                    // Family Friendly
+                    Toggle(isOn: $viewModel.familyFriendly) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "figure.and.child.holdinghands")
+                                .foregroundStyle(.cyan)
+                            Text("Family Friendly")
+                                .font(.subheadline.weight(.medium))
                         }
                     }
+                    .tint(.cyan)
                     .padding(.horizontal, 20)
                 }
                 .padding(.vertical, 16)
@@ -321,7 +227,6 @@ struct DestinationFlowView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 16))
                 .padding(.horizontal, 16)
 
-                // Error
                 if let error = viewModel.submissionError {
                     Label(error, systemImage: "exclamationmark.triangle.fill")
                         .font(.caption)
@@ -356,7 +261,6 @@ struct DestinationFlowView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 20)
 
-                // Subtitle
                 HStack(spacing: 4) {
                     Image(systemName: "sparkles")
                         .font(.caption2)
@@ -367,6 +271,98 @@ struct DestinationFlowView: View {
                 .padding(.top, 8)
                 .padding(.bottom, 32)
             }
+        }
+    }
+
+    // MARK: - Budget Tier Section
+
+    private var budgetTierSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Budget Tier")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 20)
+
+            HStack(spacing: 8) {
+                ForEach(BudgetTier.allCases) { tier in
+                    let isSelected = viewModel.selectedBudgetTier == tier
+                    Button {
+                        viewModel.selectedBudgetTier = tier
+                    } label: {
+                        Text(tier.apiValue)
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(
+                                isSelected
+                                    ? AnyShapeStyle(LinearGradient(colors: [.cyan, .blue], startPoint: .leading, endPoint: .trailing))
+                                    : AnyShapeStyle(Color(.systemGray6))
+                            )
+                            .foregroundStyle(isSelected ? .white : .primary)
+                            .clipShape(Capsule())
+                            .overlay(
+                                Capsule().stroke(isSelected ? Color.cyan : Color.clear, lineWidth: 1.5)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 20)
+
+            Text(viewModel.selectedBudgetTier.label)
+                .font(.caption)
+                .foregroundStyle(.cyan)
+                .padding(.horizontal, 20)
+        }
+    }
+
+    // MARK: - Vibe Section (multi-select)
+
+    private var vibeSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Vibe")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                if viewModel.selectedVibes.isEmpty {
+                    Text("(select at least one)")
+                        .font(.caption2)
+                        .foregroundStyle(.red.opacity(0.8))
+                }
+            }
+            .padding(.horizontal, 20)
+
+            HStack(spacing: 8) {
+                ForEach(TripVibe.allCases) { vibe in
+                    let isSelected = viewModel.selectedVibes.contains(vibe)
+                    Button {
+                        if isSelected {
+                            viewModel.selectedVibes.remove(vibe)
+                        } else {
+                            viewModel.selectedVibes.insert(vibe)
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: vibe.icon)
+                                .font(.caption2)
+                            Text(vibe.rawValue)
+                                .font(.subheadline.weight(.medium))
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            isSelected
+                                ? AnyShapeStyle(LinearGradient(colors: [.cyan, .blue], startPoint: .leading, endPoint: .trailing))
+                                : AnyShapeStyle(Color(.systemGray6))
+                        )
+                        .foregroundStyle(isSelected ? .white : .primary)
+                        .clipShape(Capsule())
+                        .shadow(color: isSelected ? .cyan.opacity(0.3) : .clear, radius: 4, y: 2)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 20)
         }
     }
 
@@ -383,53 +379,29 @@ struct DestinationFlowView: View {
         .padding(.horizontal, 20)
     }
 
-    // MARK: - Pill Button
-
-    private func pillButton(title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.subheadline.weight(.medium))
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(isSelected ? Color.cyan.opacity(0.15) : Color(.systemGray6))
-                .foregroundStyle(isSelected ? .cyan : .primary)
-                .clipShape(Capsule())
-                .overlay(
-                    Capsule().stroke(isSelected ? Color.cyan : Color.clear, lineWidth: 1.5)
-                )
-        }
-        .buttonStyle(.plain)
-    }
-
-    // MARK: - Loading View (mockup: globe with generating text)
+    // MARK: - Loading View
 
     private var loadingView: some View {
         ZStack {
             Color(red: 0.03, green: 0.03, blue: 0.10)
                 .ignoresSafeArea()
-
             VStack(spacing: 24) {
                 Spacer()
-
                 Image(systemName: "globe.americas.fill")
                     .font(.system(size: 80))
                     .foregroundStyle(.cyan.opacity(0.6))
-
                 VStack(spacing: 8) {
                     Text("Generating\nyour itinerary...")
                         .font(.title.weight(.bold))
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.white)
-
                     Text("Our travel professionals are planning your perfect trip")
                         .font(.subheadline)
                         .foregroundStyle(.white.opacity(0.5))
                 }
-
                 ProgressView()
                     .tint(.cyan)
                     .scaleEffect(1.2)
-
                 Spacer()
             }
         }

@@ -2,8 +2,6 @@ import SwiftUI
 
 // MARK: - Share Sheet View
 
-/// Modal sheet presented before sharing, allowing optional "Planned by" and "Notes" inputs.
-/// Validates: Requirements 1.1, 1.2, 1.3, 1.4, 2.1, 2.2, 2.3, 2.4, 2.5, 3.1, 3.2, 3.3, 3.4, 3.5, 4.1, 4.2, 4.3, 4.4
 struct ShareSheetView: View {
 
     let itinerary: ItineraryResponse
@@ -19,12 +17,10 @@ struct ShareSheetView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: DesignTokens.spacingMD) {
-                        // Trip title
-                        Text("\(itinerary.numDays)-Day \(itinerary.destination) \(itinerary.vibe) Trip")
+                        Text("\(itinerary.numDays)-Day \(itinerary.destination) \(itinerary.vibes.joined(separator: " & ")) Trip")
                             .font(.title3.weight(.bold))
                             .foregroundStyle(DesignTokens.textPrimary)
 
-                        // Planned by field (Req 2.1, 2.2, 2.3)
                         VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
                             Text("Planned by (optional)")
                                 .font(.caption.weight(.medium))
@@ -36,13 +32,10 @@ struct ShareSheetView: View {
                                 .padding(DesignTokens.spacingSM)
                                 .glassmorphic(cornerRadius: DesignTokens.radiusSM)
                                 .onChange(of: plannedBy) { _, newValue in
-                                    if newValue.count > 100 {
-                                        plannedBy = String(newValue.prefix(100))
-                                    }
+                                    if newValue.count > 100 { plannedBy = String(newValue.prefix(100)) }
                                 }
                         }
 
-                        // Notes field (Req 3.1, 3.2, 3.3, 3.4, 3.5)
                         VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
                             Text("Add notes (optional)")
                                 .font(.caption.weight(.medium))
@@ -63,15 +56,12 @@ struct ShareSheetView: View {
                                     .fixedSize(horizontal: false, vertical: true)
                                     .padding(DesignTokens.spacingXS)
                                     .onChange(of: notes) { _, newValue in
-                                        if newValue.count > 500 {
-                                            notes = String(newValue.prefix(500))
-                                        }
+                                        if newValue.count > 500 { notes = String(newValue.prefix(500)) }
                                     }
                             }
                             .glassmorphic(cornerRadius: DesignTokens.radiusSM)
                         }
 
-                        // Share button (Req 1.3, 4.1)
                         Button {
                             showActivitySheet = true
                         } label: {
@@ -113,14 +103,13 @@ struct ShareSheetView: View {
     }
 }
 
-// MARK: - Preview
-
 #Preview {
     ShareSheetView(
         itinerary: ItineraryResponse(
             destination: "Tokyo",
             numDays: 3,
-            vibe: "Foodie",
+            vibes: ["Foodie"],
+            budgetTier: "$$$",
             days: [],
             reasoningText: nil
         ),

@@ -1,6 +1,6 @@
 """Place recommendation routes — hotels and restaurants.
 
-Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 13.1, 13.2, 13.3, 14.1, 14.4
+Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 10.3, 10.4
 """
 
 from __future__ import annotations
@@ -22,16 +22,19 @@ router = APIRouter(prefix="/places", tags=["places"])
 async def list_hotels(
     latitude: float = Query(..., description="Search centre latitude"),
     longitude: float = Query(..., description="Search centre longitude"),
-    price_range: str | None = Query(None, description="Price filter ($–$$$$)"),
+    budget_tier: str | None = Query(None, alias="budget_tier", description="Budget tier ($-$$$$$)"),
+    price_range: str | None = Query(None, description="Price filter ($–$$$$) — legacy, use budget_tier"),
     vibe: str | None = Query(None, description="Hotel vibe (luxury, boutique, budget)"),
     excluded_ids: list[str] = Query(default=[], description="Place IDs to exclude (refresh)"),
     radius: int = Query(5000, ge=500, le=50000, description="Search radius in metres"),
 ):
-    """Return top 3 hotel recommendations (Req 7.1)."""
+    """Return top hotel recommendations (Req 7.1)."""
+    # Prefer budget_tier over legacy price_range
+    effective_price = budget_tier or price_range
     query = PlaceQuery(
         latitude=latitude,
         longitude=longitude,
-        price_range=price_range,
+        price_range=effective_price,
         vibe=vibe,
         excluded_ids=excluded_ids,
         radius=radius,
@@ -53,16 +56,18 @@ async def list_hotels(
 async def list_restaurants(
     latitude: float = Query(..., description="Search centre latitude"),
     longitude: float = Query(..., description="Search centre longitude"),
-    price_range: str | None = Query(None, description="Price filter ($–$$$$)"),
+    budget_tier: str | None = Query(None, alias="budget_tier", description="Budget tier ($-$$$$$)"),
+    price_range: str | None = Query(None, description="Price filter ($–$$$$) — legacy, use budget_tier"),
     cuisine: str | None = Query(None, description="Cuisine type filter"),
     excluded_ids: list[str] = Query(default=[], description="Place IDs to exclude (refresh)"),
     radius: int = Query(5000, ge=500, le=50000, description="Search radius in metres"),
 ):
-    """Return top 3 restaurant recommendations (Req 7.2)."""
+    """Return top restaurant recommendations (Req 7.2)."""
+    effective_price = budget_tier or price_range
     query = PlaceQuery(
         latitude=latitude,
         longitude=longitude,
-        price_range=price_range,
+        price_range=effective_price,
         cuisine=cuisine,
         excluded_ids=excluded_ids,
         radius=radius,

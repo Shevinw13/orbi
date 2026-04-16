@@ -2,8 +2,6 @@ import SwiftUI
 
 // MARK: - Cost ViewModel
 
-/// Manages cost estimation state, auto-recalculation on itinerary/hotel changes.
-/// Validates: Requirements 8.1, 8.2, 8.3, 8.4, 8.5
 @MainActor
 final class CostViewModel: ObservableObject {
 
@@ -12,21 +10,19 @@ final class CostViewModel: ObservableObject {
     @Published var errorMessage: String?
 
     private let itinerary: ItineraryResponse
-    private let restaurantPriceRange: String
+    private let budgetTier: String
 
-    /// Currently selected hotel nightly rate, updated when hotel selection changes (Req 8.5).
     private(set) var hotelNightlyRate: Double = 0
+    private(set) var hotelIsEstimated: Bool = true
 
-    init(itinerary: ItineraryResponse, restaurantPriceRange: String) {
+    init(itinerary: ItineraryResponse, budgetTier: String) {
         self.itinerary = itinerary
-        self.restaurantPriceRange = restaurantPriceRange
+        self.budgetTier = budgetTier
     }
 
-    // MARK: - Recalculate (Req 8.5)
-
-    /// Called when itinerary or hotel selection changes.
-    func recalculate(hotelNightlyRate: Double) async {
+    func recalculate(hotelNightlyRate: Double, hotelIsEstimated: Bool = true) async {
         self.hotelNightlyRate = hotelNightlyRate
+        self.hotelIsEstimated = hotelIsEstimated
         isLoading = true
         errorMessage = nil
 
@@ -45,8 +41,10 @@ final class CostViewModel: ObservableObject {
         let request = CostRequest(
             numDays: itinerary.numDays,
             hotelNightlyRate: hotelNightlyRate,
-            restaurantPriceRange: restaurantPriceRange,
-            days: days
+            restaurantPriceRange: budgetTier,
+            days: days,
+            hotelIsEstimated: hotelIsEstimated,
+            foodIsEstimated: true
         )
 
         do {
@@ -59,16 +57,12 @@ final class CostViewModel: ObservableObject {
         } catch {
             errorMessage = "Failed to calculate costs. Please try again."
         }
-
         isLoading = false
     }
 }
 
-
 // MARK: - Cost Breakdown View
 
-/// Displays total estimated trip cost and per-day breakdown.
-/// Validates: Requirements 8.1, 8.2, 8.3, 8.4, 8.5
 struct CostBreakdownView: View {
 
     @ObservedObject var viewModel: CostViewModel
@@ -104,7 +98,7 @@ struct CostBreakdownView: View {
         .padding(16)
     }
 
-    // MARK: - Total (Req 8.4)
+    // MARK: - Total
 
     private func totalSection(cost: CostBreakdown) -> some View {
         VStack(spacing: 4) {
@@ -114,31 +108,28 @@ struct CostBreakdownView: View {
             Text("$\(Int(cost.total))")
                 .font(.system(size: 36, weight: .bold, design: .rounded))
                 .foregroundStyle(.orange)
-            Text("Based on average prices")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Estimated total trip cost: $\(Int(cost.total)). Based on average prices.")
+        .accessibilityLabel("Estimated total trip cost: $\(Int(cost.total))")
     }
 
-    // MARK: - Category Breakdown (Req 8.1, 8.2, 8.3)
+    // MARK: - Category Breakdown (Hotels, Food & Drinks, Activities)
 
     private func categoryBreakdown(cost: CostBreakdown) -> some View {
         HStack(spacing: 0) {
-            categoryPill(icon: "building.2", label: "Hotel", amount: cost.hotelTotal)
+            categoryPill(icon: "building.2", label: "Hotels", amount: cost.hotelTotal, isEstimated: cost.hotelIsEstimated ?? true)
             Divider().frame(height: 40)
-            categoryPill(icon: "fork.knife", label: "Food", amount: cost.foodTotal)
+            categoryPill(icon: "fork.knife", label: "Food & Drinks", amount: cost.foodTotal, isEstimated: cost.foodIsEstimated ?? true)
             Divider().frame(height: 40)
-            categoryPill(icon: "figure.walk", label: "Activities", amount: cost.activitiesTotal)
+            categoryPill(icon: "figure.walk", label: "Activities", amount: cost.activitiesTotal, isEstimated: false)
         }
         .padding(12)
         .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
     }
 
-    private func categoryPill(icon: String, label: String, amount: Double) -> some View {
+    private func categoryPill(icon: String, label: String, amount: Double, isEstimated: Bool) -> some View {
         VStack(spacing: 4) {
             Image(systemName: icon)
                 .font(.caption)
@@ -148,13 +139,18 @@ struct CostBreakdownView: View {
                 .foregroundStyle(.secondary)
             Text("$\(Int(amount))")
                 .font(.subheadline.weight(.semibold))
+            if isEstimated {
+                Text("Estimated")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+            }
         }
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(label): $\(Int(amount))")
+        .accessibilityLabel("\(label): $\(Int(amount))\(isEstimated ? ", estimated" : "")")
     }
 
-    // MARK: - Per-Day Breakdown (Req 8.4)
+    // MARK: - Per-Day Breakdown
 
     private func perDaySection(cost: CostBreakdown) -> some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -175,9 +171,9 @@ struct CostBreakdownView: View {
             Spacer()
 
             HStack(spacing: 12) {
-                costLabel(icon: "building.2", amount: day.hotel)
-                costLabel(icon: "fork.knife", amount: day.food)
-                costLabel(icon: "figure.walk", amount: day.activities)
+                costLabel(icon: "building.2", amount: day.hotel, isEstimated: day.hotelIsEstimated ?? true)
+                costLabel(icon: "fork.knife", amount: day.food, isEstimated: day.foodIsEstimated ?? true)
+                costLabel(icon: "figure.walk", amount: day.activities, isEstimated: false)
             }
 
             Text("$\(Int(day.subtotal))")
@@ -191,7 +187,7 @@ struct CostBreakdownView: View {
         .accessibilityLabel("Day \(day.day): hotel $\(Int(day.hotel)), food $\(Int(day.food)), activities $\(Int(day.activities)), subtotal $\(Int(day.subtotal))")
     }
 
-    private func costLabel(icon: String, amount: Double) -> some View {
+    private func costLabel(icon: String, amount: Double, isEstimated: Bool) -> some View {
         HStack(spacing: 2) {
             Image(systemName: icon)
                 .font(.caption2)
@@ -199,6 +195,11 @@ struct CostBreakdownView: View {
             Text("$\(Int(amount))")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            if isEstimated && amount > 0 {
+                Text("~")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary.opacity(0.6))
+            }
         }
     }
 }
@@ -209,29 +210,26 @@ struct CostBreakdownView: View {
     let itinerary = ItineraryResponse(
         destination: "Tokyo",
         numDays: 3,
-        vibe: "Foodie",
+        vibes: ["Foodie"],
+        budgetTier: "$$$",
         days: [
             ItineraryDay(dayNumber: 1, slots: [
                 ItinerarySlot(timeSlot: "Morning", activityName: "Tsukiji Market", description: "Fresh seafood", latitude: 35.66, longitude: 139.77, estimatedDurationMin: 120, travelTimeToNextMin: 15, estimatedCostUsd: 20),
-            ], restaurant: nil),
-            ItineraryDay(dayNumber: 2, slots: [
-                ItinerarySlot(timeSlot: "Morning", activityName: "Meiji Shrine", description: "Peaceful shrine", latitude: 35.67, longitude: 139.69, estimatedDurationMin: 90, travelTimeToNextMin: 10, estimatedCostUsd: 0),
-            ], restaurant: nil),
-            ItineraryDay(dayNumber: 3, slots: [
-                ItinerarySlot(timeSlot: "Morning", activityName: "Akihabara", description: "Electronics district", latitude: 35.70, longitude: 139.77, estimatedDurationMin: 120, travelTimeToNextMin: nil, estimatedCostUsd: 30),
-            ], restaurant: nil),
+            ], meals: []),
         ]
     )
-    let vm = CostViewModel(itinerary: itinerary, restaurantPriceRange: "$$")
+    let vm = CostViewModel(itinerary: itinerary, budgetTier: "$$$")
     vm.costBreakdown = CostBreakdown(
         hotelTotal: 450,
+        hotelIsEstimated: true,
         foodTotal: 180,
+        foodIsEstimated: false,
         activitiesTotal: 50,
         total: 680,
         perDay: [
-            DayCost(day: 1, hotel: 150, food: 60, activities: 20, subtotal: 230),
-            DayCost(day: 2, hotel: 150, food: 60, activities: 0, subtotal: 210),
-            DayCost(day: 3, hotel: 150, food: 60, activities: 30, subtotal: 240),
+            DayCost(day: 1, hotel: 150, hotelIsEstimated: true, food: 60, foodIsEstimated: false, activities: 20, subtotal: 230),
+            DayCost(day: 2, hotel: 150, hotelIsEstimated: true, food: 60, foodIsEstimated: false, activities: 0, subtotal: 210),
+            DayCost(day: 3, hotel: 150, hotelIsEstimated: true, food: 60, foodIsEstimated: false, activities: 30, subtotal: 240),
         ]
     )
     return NavigationStack {

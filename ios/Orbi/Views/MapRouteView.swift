@@ -619,7 +619,7 @@ struct RideHailEstimator {
             ItinerarySlot(timeSlot: "Afternoon", activityName: "Senso-ji Temple", description: "Visit Tokyo's oldest temple", latitude: 35.7148, longitude: 139.7967, estimatedDurationMin: 90, travelTimeToNextMin: 20, estimatedCostUsd: 0),
             ItinerarySlot(timeSlot: "Evening", activityName: "Shibuya Crossing", description: "Experience the busiest crossing", latitude: 35.6595, longitude: 139.7004, estimatedDurationMin: 60, travelTimeToNextMin: nil, estimatedCostUsd: 0)
         ],
-        restaurant: nil
+        meals: []
     )
     MapRouteView(day: sampleDay)
 }

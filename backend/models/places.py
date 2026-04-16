@@ -62,3 +62,22 @@ class PlacesResponse(BaseModel):
         False,
         description="True when original filters returned no results and were relaxed (Req 7.5).",
     )
+
+
+class GooglePlaceResult(BaseModel):
+    """A place result from the Google Places API (Req 10.1, 10.2)."""
+
+    place_id: str
+    name: str
+    rating: float = 0.0
+    user_ratings_total: int = 0
+    price_level: int | None = None  # 0-4 from Google
+    price_level_display: str = ""  # Mapped to $-$$$$$
+    photo_references: list[str] = Field(default_factory=list)
+    latitude: float = 0.0
+    longitude: float = 0.0
+    formatted_address: str = ""
+    opening_hours: dict | None = None
+    price_range_min: float | None = None
+    price_range_max: float | None = None
+    is_estimated: bool = True
