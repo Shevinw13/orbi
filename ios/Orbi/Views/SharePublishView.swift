@@ -43,14 +43,30 @@ final class SharePublishViewModel: ObservableObject {
                 budgetLevel: budgetLevel,
                 tags: selectedTags.isEmpty ? [] : Array(selectedTags)
             )
-            try await APIClient.shared.requestVoid(
-                .post, path: "/shared-itineraries", body: request
-            )
+            // Use a task with timeout to prevent infinite hanging
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    try await APIClient.shared.requestVoid(
+                        .post, path: "/shared-itineraries", body: request
+                    )
+                }
+                group.addTask {
+                    try await Task.sleep(nanoseconds: 30_000_000_000) // 30s timeout
+                    throw APIError.unknown(NSError(domain: "Timeout", code: -1))
+                }
+                // Wait for first to complete (either success or timeout)
+                try await group.next()
+                group.cancelAll()
+            }
             didPublish = true
         } catch let error as APIError {
-            publishError = error.errorDescription
+            if case .unauthorized = error {
+                publishError = "Session expired. Please sign out and sign back in."
+            } else {
+                publishError = error.errorDescription
+            }
         } catch {
-            publishError = "Failed to publish itinerary."
+            publishError = "Publishing timed out. The server may be waking up — try again."
         }
         isPublishing = false
     }
