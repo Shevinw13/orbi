@@ -130,13 +130,14 @@ final class RecommendationsViewModel: ObservableObject {
         }
         isSearchingHotels = true
         let queryItems = [
+            URLQueryItem(name: "query", value: query),
             URLQueryItem(name: "latitude", value: String(latitude)),
             URLQueryItem(name: "longitude", value: String(longitude)),
-            URLQueryItem(name: "vibe", value: query),
+            URLQueryItem(name: "place_type", value: "lodging"),
         ]
         do {
             let response: PlacesResponse = try await APIClient.shared.request(
-                .get, path: "/places/hotels", queryItems: queryItems
+                .get, path: "/places/search", queryItems: queryItems
             )
             hotelSearchResults = response.results
         } catch {
@@ -152,13 +153,14 @@ final class RecommendationsViewModel: ObservableObject {
         }
         isSearchingRestaurants = true
         let queryItems = [
+            URLQueryItem(name: "query", value: query),
             URLQueryItem(name: "latitude", value: String(latitude)),
             URLQueryItem(name: "longitude", value: String(longitude)),
-            URLQueryItem(name: "cuisine", value: query),
+            URLQueryItem(name: "place_type", value: "restaurant"),
         ]
         do {
             let response: PlacesResponse = try await APIClient.shared.request(
-                .get, path: "/places/restaurants", queryItems: queryItems
+                .get, path: "/places/search", queryItems: queryItems
             )
             restaurantSearchResults = response.results
         } catch {

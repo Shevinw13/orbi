@@ -8,8 +8,9 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query
 
 from backend.models.auth import ErrorResponse
-from backend.models.places import PlaceQuery, PlacesResponse
+from backend.models.places import PlaceQuery, PlaceResult, PlacesResponse
 from backend.services.places import get_hotels, get_restaurants
+from backend.services.google_places import text_search_places
 
 router = APIRouter(prefix="/places", tags=["places"])
 
@@ -78,4 +79,45 @@ async def list_restaurants(
         raise HTTPException(
             status_code=500,
             detail={"error": "places_api_error", "message": str(exc)},
+        )
+
+
+@router.get(
+    "/search",
+    response_model=PlacesResponse,
+    responses={500: {"model": ErrorResponse}},
+)
+async def search_places(
+    query: str = Query(..., min_length=1, description="Free-text search query"),
+    latitude: float = Query(..., description="Bias center latitude"),
+    longitude: float = Query(..., description="Bias center longitude"),
+    place_type: str = Query("restaurant", description="'restaurant' or 'lodging'"),
+):
+    """Free-text search for restaurants or hotels using Google Places Text Search."""
+    try:
+        results = await text_search_places(
+            query=query,
+            latitude=latitude,
+            longitude=longitude,
+            place_type=place_type,
+        )
+        place_results = [
+            PlaceResult(
+                place_id=r.place_id,
+                name=r.name,
+                rating=r.rating,
+                price_level=r.price_level_display,
+                image_url=r.photo_references[0] if r.photo_references else None,
+                latitude=r.latitude,
+                longitude=r.longitude,
+                rating_source="google",
+                review_count=r.user_ratings_total,
+            )
+            for r in results
+        ]
+        return PlacesResponse(results=place_results, filters_broadened=False)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "search_failed", "message": str(exc)},
         )

@@ -248,19 +248,19 @@ struct FoodDrinksView: View {
         let query = searchQuery.trimmingCharacters(in: .whitespaces)
         guard !query.isEmpty else { searchResults = []; return }
         isSearching = true
-        // Get coordinates from first day's first meal or slot
         let lat = itineraryVM.itinerary.days.first?.meals.first?.latitude
             ?? itineraryVM.itinerary.days.first?.slots.first?.latitude ?? 0
         let lng = itineraryVM.itinerary.days.first?.meals.first?.longitude
             ?? itineraryVM.itinerary.days.first?.slots.first?.longitude ?? 0
         let queryItems = [
+            URLQueryItem(name: "query", value: query),
             URLQueryItem(name: "latitude", value: String(lat)),
             URLQueryItem(name: "longitude", value: String(lng)),
-            URLQueryItem(name: "cuisine", value: query),
+            URLQueryItem(name: "place_type", value: "restaurant"),
         ]
         do {
             let response: PlacesResponse = try await APIClient.shared.request(
-                .get, path: "/places/restaurants", queryItems: queryItems
+                .get, path: "/places/search", queryItems: queryItems
             )
             searchResults = response.results
         } catch {

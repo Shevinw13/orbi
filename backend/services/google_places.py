@@ -256,3 +256,71 @@ async def get_place_details(place_id: str) -> GooglePlaceResult | None:
     except Exception as exc:
         logger.warning("Google Places detail fetch failed for %s: %s", place_id, exc)
         return None
+
+
+TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"
+
+
+async def text_search_places(
+    query: str,
+    latitude: float,
+    longitude: float,
+    place_type: str = "restaurant",
+    radius: int = 10000,
+) -> list[GooglePlaceResult]:
+    """Search Google Places using free-text query (autocomplete-style).
+
+    Args:
+        query: Free-text search string (e.g. "sushi", "hilton", "italian")
+        latitude: Bias center latitude
+        longitude: Bias center longitude
+        place_type: "restaurant" or "lodging"
+        radius: Bias radius in meters
+
+    Returns:
+        List of GooglePlaceResult objects
+    """
+    if not settings.google_places_api_key:
+        logger.warning("Google Places API key not configured")
+        return []
+
+    if not query or not query.strip():
+        return []
+
+    body: dict[str, Any] = {
+        "textQuery": f"{query} {place_type} near",
+        "maxResultCount": 8,
+        "locationBias": {
+            "circle": {
+                "center": {"latitude": latitude, "longitude": longitude},
+                "radius": float(radius),
+            }
+        },
+    }
+
+    if place_type == "lodging":
+        body["textQuery"] = f"{query} hotel"
+    else:
+        body["textQuery"] = f"{query} restaurant"
+
+    headers = {
+        "X-Goog-Api-Key": settings.google_places_api_key,
+        "X-Goog-FieldMask": (
+            "places.id,places.displayName,places.rating,places.userRatingCount,"
+            "places.priceLevel,places.photos,places.location,places.formattedAddress"
+        ),
+        "Content-Type": "application/json",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(TEXT_SEARCH_URL, headers=headers, json=body)
+            resp.raise_for_status()
+
+        data = resp.json()
+        places = data.get("places", [])
+        return [_parse_place_result(p) for p in places]
+
+    except Exception as exc:
+        logger.warning("Google Places text search failed: %s", exc)
+        return []
