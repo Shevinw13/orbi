@@ -170,6 +170,9 @@ struct ExploreFeedView: View {
                 }
             }
             .padding(.vertical, DesignTokens.spacingSM)
+            .navigationDestination(for: String.self) { id in
+                ItineraryDetailView(itineraryId: id)
+            }
         }
         .refreshable { await viewModel.refresh() }
     }
@@ -192,9 +195,6 @@ struct ExploreFeedView: View {
                 }
                 .padding(.horizontal, DesignTokens.spacingMD)
             }
-        }
-        .navigationDestination(for: String.self) { id in
-            ItineraryDetailView(itineraryId: id)
         }
     }
 
