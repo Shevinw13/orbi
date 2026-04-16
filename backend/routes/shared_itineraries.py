@@ -88,6 +88,8 @@ async def copy_itinerary(itinerary_id: str, request: Request):
 async def publish_itinerary(body: SharedItineraryPublishRequest, request: Request):
     """Publish a trip as a shared itinerary. Auth required."""
     user_id: str = request.state.user_id
+    logger.info("Publish request: user=%s, trip=%s, title=%s, dest=%s, budget=%s",
+                user_id, body.source_trip_id, body.title, body.destination, body.budget_level)
     try:
         result = await publish_shared_itinerary(
             user_id=user_id,
@@ -101,9 +103,12 @@ async def publish_itinerary(body: SharedItineraryPublishRequest, request: Reques
         )
         return result
     except ValueError as exc:
+        logger.warning("Publish validation error: %s", exc)
         raise HTTPException(status_code=422, detail=str(exc))
     except PermissionError:
         raise HTTPException(status_code=403, detail="You do not have access to this trip")
     except Exception as exc:
-        logger.error("Failed to publish itinerary: %s", exc, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to publish itinerary: {exc}")
+        import traceback
+        tb = traceback.format_exc()
+        logger.error("Failed to publish itinerary: %s\n%s", exc, tb)
+        raise HTTPException(status_code=500, detail=f"Failed to publish: {exc}")

@@ -64,7 +64,7 @@ struct DestinationInsightsView: View {
                                 .font(.caption.weight(.medium))
                                 .foregroundStyle(DesignTokens.textPrimary)
                         }
-                        Text("H: \(Int(weather.tempHigh))° L: \(Int(weather.tempLow))°")
+                        Text("H: \(Int(weather.tempHigh))°F  L: \(Int(weather.tempLow))°F")
                             .font(.caption)
                             .foregroundStyle(DesignTokens.textSecondary)
                     }

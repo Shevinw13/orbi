@@ -22,7 +22,7 @@ WEATHER_CACHE_TTL = 3600  # 1 hour
 
 
 def _cache_key(lat: float, lng: float) -> str:
-    return f"weather:{round(lat, 2)}:{round(lng, 2)}"
+    return f"weather:v2:{round(lat, 2)}:{round(lng, 2)}"
 
 
 # WMO weather code to condition string mapping
@@ -77,6 +77,7 @@ async def get_weather(latitude: float, longitude: float) -> WeatherResponse:
                     "latitude": latitude,
                     "longitude": longitude,
                     "daily": "temperature_2m_max,temperature_2m_min,weather_code",
+                    "temperature_unit": "fahrenheit",
                     "timezone": "auto",
                     "forecast_days": 1,
                 },
