@@ -651,12 +651,17 @@ struct SlotDetailView: View {
 struct AddActivitySheet: View {
 
     let dayNumber: Int
+    var destination: String = ""
+    var latitude: Double = 0
+    var longitude: Double = 0
     let onAdd: (String, String, Int, String) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var name: String = ""
     @State private var description: String = ""
     @State private var selectedTimeBlock: String = "Morning"
+    @State private var searchResults: [PlaceRecommendation] = []
+    @State private var isSearching: Bool = false
 
     private let timeBlocks = ["Morning", "Afternoon", "Evening"]
 
@@ -666,41 +671,149 @@ struct AddActivitySheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    TextField("Activity name", text: $name)
-                    TextField("Description (optional)", text: $description)
-                    Picker("Time Block", selection: $selectedTimeBlock) {
-                        ForEach(timeBlocks, id: \.self) { block in
-                            Text(block).tag(block)
+            ScrollView {
+                VStack(alignment: .leading, spacing: DesignTokens.spacingMD) {
+                    Text("Add Activity to Day \(dayNumber)")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(DesignTokens.textSecondary)
+                        .padding(.horizontal, DesignTokens.spacingMD)
+
+                    // Name with autocomplete
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Activity name")
+                            .font(.caption)
+                            .foregroundStyle(DesignTokens.textSecondary)
+                        HStack {
+                            TextField("Search places...", text: $name)
+                                .font(.body)
+                                .foregroundStyle(DesignTokens.textPrimary)
+                            if isSearching {
+                                ProgressView().controlSize(.small).tint(DesignTokens.accentCyan)
+                            }
+                        }
+                        .padding(DesignTokens.spacingSM)
+                        .glassmorphic(cornerRadius: DesignTokens.radiusSM)
+                        .onChange(of: name) { _, newValue in
+                            Task {
+                                try? await Task.sleep(nanoseconds: 400_000_000)
+                                guard name == newValue, newValue.count >= 2 else { return }
+                                await searchPlaces(query: newValue)
+                            }
+                        }
+
+                        // Autocomplete results
+                        if !searchResults.isEmpty {
+                            VStack(spacing: 2) {
+                                ForEach(searchResults.prefix(5)) { place in
+                                    Button {
+                                        name = place.name
+                                        description = place.formattedRestaurantPrice
+                                        searchResults = []
+                                    } label: {
+                                        HStack {
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(place.name)
+                                                    .font(.subheadline)
+                                                    .foregroundStyle(DesignTokens.textPrimary)
+                                                if place.rating > 0 {
+                                                    HStack(spacing: 4) {
+                                                        Image(systemName: "star.fill").foregroundStyle(.yellow)
+                                                        Text(String(format: "%.1f", place.rating))
+                                                    }
+                                                    .font(.caption2)
+                                                    .foregroundStyle(DesignTokens.textSecondary)
+                                                }
+                                            }
+                                            Spacer()
+                                            Image(systemName: "plus.circle")
+                                                .foregroundStyle(DesignTokens.accentCyan)
+                                        }
+                                        .padding(.vertical, 6)
+                                        .padding(.horizontal, DesignTokens.spacingSM)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .glassmorphic(cornerRadius: DesignTokens.radiusSM)
                         }
                     }
-                    .pickerStyle(.segmented)
-                } header: {
-                    Text("Add Activity to Day \(dayNumber)")
-                }
-                Section {
+                    .padding(.horizontal, DesignTokens.spacingMD)
+
+                    // Description
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Description (optional)")
+                            .font(.caption)
+                            .foregroundStyle(DesignTokens.textSecondary)
+                        TextField("Brief description", text: $description)
+                            .font(.body)
+                            .foregroundStyle(DesignTokens.textPrimary)
+                            .padding(DesignTokens.spacingSM)
+                            .glassmorphic(cornerRadius: DesignTokens.radiusSM)
+                    }
+                    .padding(.horizontal, DesignTokens.spacingMD)
+
+                    // Time block
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Time Block")
+                            .font(.caption)
+                            .foregroundStyle(DesignTokens.textSecondary)
+                        Picker("Time Block", selection: $selectedTimeBlock) {
+                            ForEach(timeBlocks, id: \.self) { block in
+                                Text(block).tag(block)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                    }
+                    .padding(.horizontal, DesignTokens.spacingMD)
+
+                    // Add button
                     Button {
                         onAdd(name.trimmingCharacters(in: .whitespaces), description, 90, selectedTimeBlock)
                         dismiss()
                     } label: {
-                        HStack {
-                            Spacer()
-                            Text("Add Activity").font(.headline)
-                            Spacer()
-                        }
+                        Text("Add Activity")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(isValid ? DesignTokens.accentGradient : LinearGradient(colors: [.gray], startPoint: .leading, endPoint: .trailing))
+                            .clipShape(RoundedRectangle(cornerRadius: DesignTokens.radiusMD))
                     }
                     .disabled(!isValid)
+                    .padding(.horizontal, DesignTokens.spacingMD)
                 }
+                .padding(.vertical, DesignTokens.spacingMD)
             }
+            .background(DesignTokens.backgroundPrimary)
             .navigationTitle("New Activity")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .foregroundStyle(DesignTokens.textPrimary)
                 }
             }
         }
+    }
+
+    private func searchPlaces(query: String) async {
+        guard latitude != 0, longitude != 0 else { return }
+        isSearching = true
+        let queryItems = [
+            URLQueryItem(name: "query", value: query),
+            URLQueryItem(name: "latitude", value: String(latitude)),
+            URLQueryItem(name: "longitude", value: String(longitude)),
+            URLQueryItem(name: "place_type", value: "restaurant"),
+        ]
+        do {
+            let response: PlacesResponse = try await APIClient.shared.request(
+                .get, path: "/places/search", queryItems: queryItems
+            )
+            searchResults = response.results
+        } catch {
+            searchResults = []
+        }
+        isSearching = false
     }
 }
 

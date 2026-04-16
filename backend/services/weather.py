@@ -91,8 +91,8 @@ async def get_weather(latitude: float, longitude: float) -> WeatherResponse:
         weather_code = daily.get("weather_code", [0])[0]
         condition = _WMO_CONDITIONS.get(weather_code, "Unknown")
 
-    except Exception:
-        logger.warning("Open-Meteo request failed for lat=%s, lng=%s", latitude, longitude)
+    except Exception as exc:
+        logger.warning("Open-Meteo request failed for lat=%s, lng=%s: %s", latitude, longitude, exc, exc_info=True)
         temp_high = 0.0
         temp_low = 0.0
         condition = "Unavailable"

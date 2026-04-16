@@ -84,8 +84,11 @@ struct DestinationInsightsView: View {
                 .padding(DesignTokens.spacingSM)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .glassmorphic(cornerRadius: DesignTokens.radiusSM)
-            } else if weatherVM.errorMessage != nil {
-                EmptyView()
+            } else if let error = weatherVM.errorMessage {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(DesignTokens.textTertiary)
+                    .padding(DesignTokens.spacingSM)
             }
         }
         .task {
