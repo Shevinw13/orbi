@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
 CACHE_TTL = 86400  # 24 hours
 MAX_TRAVEL_TIME_MIN = 60  # Req 4.8
+PROMPT_VERSION = "v3"  # Bump when prompt changes to invalidate stale cache
 
 # Budget tier mapping for prompt calibration
 BUDGET_TIER_MAP: dict[str, str] = {
@@ -84,7 +85,8 @@ def _build_cache_key(request: ItineraryRequest) -> str:
         f"{request.num_days}:"
         f"{request.budget_tier}:"
         f"{vibes_str}:"
-        f"{request.family_friendly}"
+        f"{request.family_friendly}:"
+        f"{PROMPT_VERSION}"
     )
     key_hash = hashlib.sha256(raw.encode()).hexdigest()[:32]
     return f"itinerary:{key_hash}"
@@ -295,7 +297,11 @@ async def generate_itinerary(request: ItineraryRequest) -> ItineraryResponse:
 
     if cached is not None:
         logger.info("Cache hit for itinerary: %s", cache_key)
-        return ItineraryResponse(**cached)
+        cached_itinerary = ItineraryResponse(**cached)
+        # Validate cached result still meets current criteria
+        if _validate_itinerary(cached_itinerary, request.num_days):
+            return cached_itinerary
+        logger.info("Cached itinerary failed validation, regenerating")
 
     logger.info("Cache miss — generating itinerary for %s", request.destination)
     prompt = _build_prompt(request)
@@ -308,10 +314,45 @@ async def generate_itinerary(request: ItineraryRequest) -> ItineraryResponse:
 
     itinerary = _parse_itinerary_response(raw_json, request)
 
+    # Validate: each day must have 3 time blocks with activities + 3 meals
+    # If OpenAI didn't follow instructions, retry once without cache
+    if not _validate_itinerary(itinerary, request.num_days):
+        logger.warning("Generated itinerary failed validation, retrying...")
+        try:
+            raw_json = await _call_openai(prompt)
+            itinerary = _parse_itinerary_response(raw_json, request)
+        except Exception as exc:
+            logger.error("OpenAI retry failed: %s", exc)
+            # Use the first attempt even if imperfect
+
     # Cache the result
     set_cached(cache_key, itinerary.model_dump(), ttl=CACHE_TTL)
 
     return itinerary
+
+
+def _validate_itinerary(itinerary: ItineraryResponse, expected_days: int) -> bool:
+    """Check that the itinerary meets minimum criteria:
+    - Correct number of days
+    - Each day has at least 1 activity per time block (Morning, Afternoon, Evening)
+    - Each day has exactly 3 meals (Breakfast, Lunch, Dinner)
+    """
+    if len(itinerary.days) < expected_days:
+        return False
+
+    required_blocks = {"Morning", "Afternoon", "Evening"}
+    required_meals = {"Breakfast", "Lunch", "Dinner"}
+
+    for day in itinerary.days:
+        slot_blocks = {s.time_slot for s in day.slots}
+        meal_types = {m.meal_type for m in day.meals}
+
+        if not required_blocks.issubset(slot_blocks):
+            return False
+        if not required_meals.issubset(meal_types):
+            return False
+
+    return True
 
 
 def _build_replace_prompt(request: ReplaceActivityRequest) -> str:

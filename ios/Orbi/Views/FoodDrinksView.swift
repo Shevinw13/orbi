@@ -11,6 +11,8 @@ struct FoodDrinksView: View {
     let vibes: [String]
 
     @State private var searchQuery: String = ""
+    @State private var searchResults: [PlaceRecommendation] = []
+    @State private var isSearching: Bool = false
 
     var body: some View {
         ScrollView {
@@ -113,7 +115,7 @@ struct FoodDrinksView: View {
                         }
                         Text(meal.priceLevel)
                         if let cost = meal.estimatedCostUsd, cost > 0 {
-                            Text("~$\(Int(cost))")
+                            Text("~$\(Int(cost))/person")
                         }
                     }
                     .font(.caption)
@@ -121,7 +123,7 @@ struct FoodDrinksView: View {
                 }
                 Spacer()
                 if meal.isEstimated {
-                    Text("Estimated")
+                    Text("Est. per person")
                         .font(.caption2)
                         .foregroundStyle(DesignTokens.textTertiary)
                 }
@@ -198,13 +200,73 @@ struct FoodDrinksView: View {
             HStack {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(DesignTokens.textTertiary)
-                TextField("Search by name...", text: $searchQuery)
+                TextField("Search by cuisine or name...", text: $searchQuery)
                     .font(.subheadline)
                     .foregroundStyle(DesignTokens.textPrimary)
+                    .onSubmit { Task { await searchRestaurants() } }
+                if isSearching {
+                    ProgressView().controlSize(.small).tint(DesignTokens.accentCyan)
+                }
             }
             .padding(DesignTokens.spacingSM)
             .glassmorphic(cornerRadius: DesignTokens.radiusSM)
+            .onChange(of: searchQuery) { _, newValue in
+                Task {
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    guard searchQuery == newValue else { return }
+                    await searchRestaurants()
+                }
+            }
+
+            ForEach(searchResults) { result in
+                searchResultCard(result)
+            }
         }
+    }
+
+    private func searchRestaurants() async {
+        let query = searchQuery.trimmingCharacters(in: .whitespaces)
+        guard !query.isEmpty else { searchResults = []; return }
+        isSearching = true
+        // Get coordinates from first day's first meal or slot
+        let lat = itineraryVM.itinerary.days.first?.meals.first?.latitude
+            ?? itineraryVM.itinerary.days.first?.slots.first?.latitude ?? 0
+        let lng = itineraryVM.itinerary.days.first?.meals.first?.longitude
+            ?? itineraryVM.itinerary.days.first?.slots.first?.longitude ?? 0
+        let queryItems = [
+            URLQueryItem(name: "latitude", value: String(lat)),
+            URLQueryItem(name: "longitude", value: String(lng)),
+            URLQueryItem(name: "cuisine", value: query),
+        ]
+        do {
+            let response: PlacesResponse = try await APIClient.shared.request(
+                .get, path: "/places/restaurants", queryItems: queryItems
+            )
+            searchResults = response.results
+        } catch {
+            searchResults = []
+        }
+        isSearching = false
+    }
+
+    private func searchResultCard(_ place: PlaceRecommendation) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(place.name)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(DesignTokens.textPrimary)
+            HStack(spacing: 6) {
+                if place.rating > 0 {
+                    Label(String(format: "%.1f", place.rating), systemImage: "star.fill")
+                        .foregroundStyle(.yellow)
+                }
+                Text(place.formattedRestaurantPrice)
+                    .foregroundStyle(DesignTokens.accentCyan)
+            }
+            .font(.caption)
+        }
+        .padding(DesignTokens.spacingSM)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassmorphic(cornerRadius: DesignTokens.radiusMD)
     }
 
     private func timeSlotColor(_ block: String) -> Color {

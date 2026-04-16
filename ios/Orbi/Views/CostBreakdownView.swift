@@ -66,6 +66,7 @@ final class CostViewModel: ObservableObject {
 struct CostBreakdownView: View {
 
     @ObservedObject var viewModel: CostViewModel
+    var itinerary: ItineraryResponse? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -86,7 +87,11 @@ struct CostBreakdownView: View {
             } else if let cost = viewModel.costBreakdown {
                 totalSection(cost: cost)
                 categoryBreakdown(cost: cost)
-                perDaySection(cost: cost)
+                if let itinerary = itinerary {
+                    itemizedSection(itinerary: itinerary, cost: cost)
+                } else {
+                    perDaySection(cost: cost)
+                }
             } else {
                 Text("Select a hotel to see cost estimates")
                     .font(.subheadline)
@@ -201,6 +206,112 @@ struct CostBreakdownView: View {
                     .foregroundStyle(.secondary.opacity(0.6))
             }
         }
+    }
+
+    // MARK: - Itemized Breakdown
+
+    private func itemizedSection(itinerary: ItineraryResponse, cost: CostBreakdown) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Itemized Breakdown")
+                .font(.subheadline.weight(.semibold))
+
+            // Hotel line (if we have a nightly rate)
+            if cost.hotelTotal > 0 {
+                HStack(spacing: 8) {
+                    Image(systemName: "building.2")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .frame(width: 20)
+                    Text("Hotel (\(itinerary.numDays) nights)")
+                        .font(.caption)
+                        .foregroundStyle(DesignTokens.textPrimary)
+                    Spacer()
+                    Text("$\(Int(cost.hotelTotal))")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(DesignTokens.textPrimary)
+                    if cost.hotelIsEstimated == true {
+                        Text("est.")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+
+            ForEach(itinerary.days) { day in
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Day \(day.dayNumber)")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(DesignTokens.textSecondary)
+
+                    ForEach(day.slots) { slot in
+                        itemRow(
+                            icon: "figure.walk",
+                            name: slot.activityName,
+                            timeSlot: slot.timeSlot,
+                            cost: slot.estimatedCostUsd,
+                            isEstimated: false
+                        )
+                    }
+
+                    ForEach(day.meals) { meal in
+                        itemRow(
+                            icon: "fork.knife",
+                            name: "\(meal.mealType): \(meal.restaurantName)",
+                            timeSlot: meal.mealType,
+                            cost: meal.estimatedCostUsd,
+                            isEstimated: meal.isEstimated,
+                            perPerson: true
+                        )
+                    }
+
+                    // Day subtotal
+                    let dayActivities = day.slots.reduce(0.0) { $0 + ($1.estimatedCostUsd ?? 0) }
+                    let dayFood = day.meals.reduce(0.0) { $0 + ($1.estimatedCostUsd ?? 0) }
+                    let dayHotel = cost.perDay.first(where: { $0.day == day.dayNumber })?.hotel ?? 0
+                    let dayTotal = dayActivities + dayFood + dayHotel
+
+                    HStack {
+                        Spacer()
+                        Text("Day \(day.dayNumber) subtotal: $\(Int(dayTotal))")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(DesignTokens.textSecondary)
+                    }
+                    .padding(.top, 2)
+                }
+                .padding(10)
+                .background(Color(.systemGray6).opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+            }
+        }
+    }
+
+    private func itemRow(icon: String, name: String, timeSlot: String, cost: Double?, isEstimated: Bool, perPerson: Bool = false) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.caption2)
+                .foregroundStyle(.orange)
+                .frame(width: 16)
+            Text(name)
+                .font(.caption)
+                .foregroundStyle(DesignTokens.textPrimary)
+                .lineLimit(1)
+            Spacer()
+            if let cost = cost, cost > 0 {
+                Text("$\(Int(cost))\(perPerson ? "/pp" : "")")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(DesignTokens.textPrimary)
+                if isEstimated {
+                    Text("est.")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Text("Free")
+                    .font(.caption)
+                    .foregroundStyle(DesignTokens.textTertiary)
+            }
+        }
+        .padding(.vertical, 2)
     }
 }
 

@@ -214,12 +214,29 @@ struct StaysView: View {
             HStack {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(DesignTokens.textTertiary)
-                TextField("Search by name...", text: $searchQuery)
+                TextField("Search by name or type...", text: $searchQuery)
                     .font(.subheadline)
                     .foregroundStyle(DesignTokens.textPrimary)
+                    .onSubmit {
+                        Task { await viewModel.searchHotels(query: searchQuery) }
+                    }
+                if viewModel.isSearchingHotels {
+                    ProgressView().controlSize(.small).tint(DesignTokens.accentCyan)
+                }
             }
             .padding(DesignTokens.spacingSM)
             .glassmorphic(cornerRadius: DesignTokens.radiusSM)
+            .onChange(of: searchQuery) { _, newValue in
+                Task {
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    guard searchQuery == newValue else { return }
+                    await viewModel.searchHotels(query: newValue)
+                }
+            }
+
+            ForEach(viewModel.hotelSearchResults) { hotel in
+                hotelCard(hotel)
+            }
         }
     }
 

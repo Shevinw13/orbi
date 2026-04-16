@@ -207,7 +207,7 @@ struct TripResultView: View {
             FoodDrinksView(itineraryVM: itineraryVM, budgetTier: budgetTier, vibes: vibes)
         case .cost:
             ScrollView {
-                CostBreakdownView(viewModel: costVM)
+                CostBreakdownView(viewModel: costVM, itinerary: itineraryVM.itinerary)
             }
         }
     }
@@ -339,7 +339,10 @@ struct TripResultView: View {
     }
 
     private var bookmarkPersistenceKey: String {
-        "bookmark_\(itinerary.destination)_\(itinerary.numDays)_\(vibes.joined(separator: ","))"
+        // Use a unique key per generation session to avoid false matches
+        let vibesKey = vibes.sorted().joined(separator: ",")
+        let daysKey = itineraryVM.itinerary.days.flatMap { $0.slots.map(\.activityName) }.prefix(3).joined(separator: "|")
+        return "bookmark_\(itinerary.destination)_\(itinerary.numDays)_\(vibesKey)_\(daysKey)"
     }
 
     private func persistBookmarkState(tripId: String) {
@@ -357,15 +360,10 @@ struct TripResultView: View {
     }
 
     private func checkIfAlreadySaved() async {
-        do {
-            let trips: [TripListItem] = try await APIClient.shared.request(.get, path: "/trips")
-            if let match = trips.first(where: {
-                $0.destination == itinerary.destination && $0.numDays == itinerary.numDays
-            }) {
-                savedTripId = match.id
-                persistBookmarkState(tripId: match.id)
-            }
-        } catch { }
+        // Only restore bookmark if we have a persisted key for this exact itinerary
+        if let persisted = UserDefaults.standard.string(forKey: bookmarkPersistenceKey) {
+            savedTripId = persisted
+        }
     }
 
     private func estimateNightlyRate(priceLevel: String) -> Double {
@@ -553,14 +551,14 @@ struct InlineDaySectionView: View {
                     Text(meal.cuisine)
                     Text(meal.priceLevel)
                     if let cost = meal.estimatedCostUsd, cost > 0 {
-                        Text("~$\(Int(cost))")
+                        Text("~$\(Int(cost))/person")
                     }
                 }
                 .font(.caption2)
                 .foregroundStyle(DesignTokens.textSecondary)
 
                 if meal.isEstimated {
-                    Text("Estimated")
+                    Text("Est. per person")
                         .font(.caption2)
                         .foregroundStyle(DesignTokens.textTertiary)
                 }

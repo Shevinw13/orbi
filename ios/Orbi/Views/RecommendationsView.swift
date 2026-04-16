@@ -15,6 +15,10 @@ final class RecommendationsViewModel: ObservableObject {
     @Published var restaurantError: String?
     @Published var selectedHotel: PlaceRecommendation?
     @Published var selectedRestaurants: Set<String> = []
+    @Published var hotelSearchResults: [PlaceRecommendation] = []
+    @Published var restaurantSearchResults: [PlaceRecommendation] = []
+    @Published var isSearchingHotels: Bool = false
+    @Published var isSearchingRestaurants: Bool = false
 
     private var excludedHotelIds: [String] = []
     private var excludedRestaurantIds: [String] = []
@@ -117,6 +121,50 @@ final class RecommendationsViewModel: ObservableObject {
         } else {
             selectedRestaurants.insert(restaurant.placeId)
         }
+    }
+
+    func searchHotels(query: String) async {
+        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else {
+            hotelSearchResults = []
+            return
+        }
+        isSearchingHotels = true
+        let queryItems = [
+            URLQueryItem(name: "latitude", value: String(latitude)),
+            URLQueryItem(name: "longitude", value: String(longitude)),
+            URLQueryItem(name: "vibe", value: query),
+        ]
+        do {
+            let response: PlacesResponse = try await APIClient.shared.request(
+                .get, path: "/places/hotels", queryItems: queryItems
+            )
+            hotelSearchResults = response.results
+        } catch {
+            hotelSearchResults = []
+        }
+        isSearchingHotels = false
+    }
+
+    func searchRestaurants(query: String) async {
+        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else {
+            restaurantSearchResults = []
+            return
+        }
+        isSearchingRestaurants = true
+        let queryItems = [
+            URLQueryItem(name: "latitude", value: String(latitude)),
+            URLQueryItem(name: "longitude", value: String(longitude)),
+            URLQueryItem(name: "cuisine", value: query),
+        ]
+        do {
+            let response: PlacesResponse = try await APIClient.shared.request(
+                .get, path: "/places/restaurants", queryItems: queryItems
+            )
+            restaurantSearchResults = response.results
+        } catch {
+            restaurantSearchResults = []
+        }
+        isSearchingRestaurants = false
     }
 }
 
