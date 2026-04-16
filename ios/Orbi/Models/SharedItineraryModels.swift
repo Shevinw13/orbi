@@ -64,7 +64,7 @@ struct SharedItineraryPublishRequest: Encodable {
     let description: String
     let destination: String
     let budgetLevel: Int
-    let tags: [String]?
+    let tags: [String]
 }
 
 // MARK: - Copy Response

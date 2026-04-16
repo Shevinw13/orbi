@@ -41,7 +41,7 @@ final class SharePublishViewModel: ObservableObject {
                 description: description.trimmingCharacters(in: .whitespaces),
                 destination: destination.trimmingCharacters(in: .whitespaces),
                 budgetLevel: budgetLevel,
-                tags: selectedTags.isEmpty ? nil : Array(selectedTags)
+                tags: selectedTags.isEmpty ? [] : Array(selectedTags)
             )
             let _: [String: AnyCodableValue] = try await APIClient.shared.request(
                 .post, path: "/shared-itineraries", body: request
