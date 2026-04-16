@@ -87,7 +87,9 @@ async def copy_itinerary(itinerary_id: str, request: Request):
 @router.post("", status_code=201)
 async def publish_itinerary(body: SharedItineraryPublishRequest, request: Request):
     """Publish a trip as a shared itinerary. Auth required."""
-    user_id: str = request.state.user_id
+    user_id = getattr(request.state, "user_id", None)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
     logger.info("Publish request: user=%s, trip=%s, title=%s, dest=%s, budget=%s",
                 user_id, body.source_trip_id, body.title, body.destination, body.budget_level)
     try:
@@ -112,3 +114,38 @@ async def publish_itinerary(body: SharedItineraryPublishRequest, request: Reques
         tb = traceback.format_exc()
         logger.error("Failed to publish itinerary: %s\n%s", exc, tb)
         raise HTTPException(status_code=500, detail=f"Failed to publish: {exc}")
+
+
+@router.get("/debug/test-insert")
+async def debug_test_insert():
+    """Debug endpoint to test shared_itineraries insert. Remove after debugging."""
+    from backend.services.shared_itineraries import _get_supabase
+    sb = _get_supabase()
+    
+    # First get any trip to use as source
+    trips = sb.table("trips").select("id, user_id, destination, num_days").limit(1).execute()
+    if not trips.data:
+        return {"error": "No trips found in database"}
+    
+    trip = trips.data[0]
+    
+    row = {
+        "user_id": str(trip["user_id"]),
+        "source_trip_id": str(trip["id"]),
+        "title": "Debug Test",
+        "description": "Testing insert",
+        "destination": str(trip.get("destination", "Test")),
+        "budget_level": 3,
+        "num_days": int(trip.get("num_days") or 1),
+        "tags": [],
+    }
+    
+    try:
+        result = sb.table("shared_itineraries").insert(row).execute()
+        if result.data:
+            # Clean up
+            sb.table("shared_itineraries").delete().eq("id", result.data[0]["id"]).execute()
+            return {"success": True, "inserted_id": result.data[0]["id"], "message": "Insert worked, row cleaned up"}
+        return {"success": False, "message": "Insert returned no data"}
+    except Exception as e:
+        return {"success": False, "error": str(e), "error_type": type(e).__name__}
