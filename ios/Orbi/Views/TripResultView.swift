@@ -38,6 +38,8 @@ struct TripResultView: View {
     @State private var saveError: String?
     @State private var showShareSheet: Bool = false
     @State private var plannedByText: String = ""
+    @State private var showShareToExplorePrompt: Bool = false
+    @State private var showSharePublishView: Bool = false
 
     @StateObject private var itineraryVM: ItineraryViewModel
     @StateObject private var recommendationsVM: RecommendationsViewModel
@@ -106,6 +108,15 @@ struct TripResultView: View {
                     itinerary: itineraryVM.itinerary,
                     plannedBy: $plannedByText
                 )
+            }
+            .alert("Share this trip to Explore?", isPresented: $showShareToExplorePrompt) {
+                Button("Share") { showSharePublishView = true }
+                Button("Not now", role: .cancel) { }
+            }
+            .sheet(isPresented: $showSharePublishView) {
+                if let tripId = savedTripId {
+                    SharePublishView(tripId: tripId, tripDestination: itinerary.destination)
+                }
             }
             .onAppear {
                 loadPersistedBookmarkState()
@@ -218,8 +229,8 @@ struct TripResultView: View {
             }
         }
         .sheet(isPresented: $itineraryVM.showAddActivity) {
-            AddActivitySheet(dayNumber: itineraryVM.addActivityDayNumber) { name, desc, duration in
-                itineraryVM.addActivity(to: itineraryVM.addActivityDayNumber, name: name, description: desc, durationMin: duration)
+            AddActivitySheet(dayNumber: itineraryVM.addActivityDayNumber) { name, desc, duration, timeSlot in
+                itineraryVM.addActivity(to: itineraryVM.addActivityDayNumber, name: name, description: desc, durationMin: duration, timeSlot: timeSlot)
             }
         }
     }
@@ -277,13 +288,21 @@ struct TripResultView: View {
     private func saveTrip() async {
         isSaving = true
         saveError = nil
+
+        // Serialize the current itinerary into [String: AnyCodableValue]
+        var itineraryDict: [String: AnyCodableValue]? = nil
+        if let data = try? JSONEncoder().encode(itineraryVM.itinerary),
+           let jsonObj = try? JSONDecoder().decode([String: AnyCodableValue].self, from: data) {
+            itineraryDict = jsonObj
+        }
+
         let request = TripSaveRequest(
             destination: itinerary.destination,
             destinationLatLng: "\(city.latitude),\(city.longitude)",
             numDays: itinerary.numDays,
             vibe: vibes.first,
             preferences: nil,
-            itinerary: nil,
+            itinerary: itineraryDict,
             selectedHotelId: recommendationsVM.selectedHotel?.placeId,
             selectedRestaurants: nil,
             costBreakdown: nil
@@ -294,6 +313,7 @@ struct TripResultView: View {
             )
             savedTripId = response.id
             persistBookmarkState(tripId: response.id)
+            showShareToExplorePrompt = true
         } catch let error as APIError {
             saveError = error.errorDescription
         } catch {

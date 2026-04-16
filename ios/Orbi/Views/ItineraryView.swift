@@ -12,6 +12,7 @@ final class ItineraryViewModel: ObservableObject {
     @Published var showDetail: Bool = false
     @Published var showAddActivity: Bool = false
     @Published var addActivityDayNumber: Int = 1
+    @Published var addActivityTimeSlot: String = "Morning"
     @Published var isReplacing: Bool = false
     @Published var errorMessage: String?
     @Published var estimatedCost: CostBreakdown?
@@ -186,10 +187,10 @@ final class ItineraryViewModel: ObservableObject {
 
     // MARK: - Add / Remove
 
-    func addActivity(to dayNumber: Int, name: String, description: String, durationMin: Int) {
+    func addActivity(to dayNumber: Int, name: String, description: String, durationMin: Int, timeSlot: String) {
         guard let dayIndex = itinerary.days.firstIndex(where: { $0.dayNumber == dayNumber }) else { return }
         let newSlot = ItinerarySlot(
-            timeSlot: "Custom",
+            timeSlot: timeSlot,
             activityName: name,
             description: description,
             latitude: 0,
@@ -432,8 +433,8 @@ struct ItineraryView: View {
                 }
             }
             .sheet(isPresented: $viewModel.showAddActivity) {
-                AddActivitySheet(dayNumber: viewModel.addActivityDayNumber) { name, desc, duration in
-                    viewModel.addActivity(to: viewModel.addActivityDayNumber, name: name, description: desc, durationMin: duration)
+                AddActivitySheet(dayNumber: viewModel.addActivityDayNumber) { name, desc, duration, timeSlot in
+                    viewModel.addActivity(to: viewModel.addActivityDayNumber, name: name, description: desc, durationMin: duration, timeSlot: timeSlot)
                 }
             }
             .sheet(isPresented: $viewModel.showReplaceSuggestions) {
@@ -650,15 +651,17 @@ struct SlotDetailView: View {
 struct AddActivitySheet: View {
 
     let dayNumber: Int
-    let onAdd: (String, String, Int) -> Void
+    let onAdd: (String, String, Int, String) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var name: String = ""
     @State private var description: String = ""
-    @State private var durationText: String = "60"
+    @State private var selectedTimeBlock: String = "Morning"
+
+    private let timeBlocks = ["Morning", "Afternoon", "Evening"]
 
     private var isValid: Bool {
-        !name.trimmingCharacters(in: .whitespaces).isEmpty && (Int(durationText) ?? 0) > 0
+        !name.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     var body: some View {
@@ -667,15 +670,18 @@ struct AddActivitySheet: View {
                 Section {
                     TextField("Activity name", text: $name)
                     TextField("Description (optional)", text: $description)
-                    TextField("Duration in minutes", text: $durationText)
-                        .keyboardType(.numberPad)
+                    Picker("Time Block", selection: $selectedTimeBlock) {
+                        ForEach(timeBlocks, id: \.self) { block in
+                            Text(block).tag(block)
+                        }
+                    }
+                    .pickerStyle(.segmented)
                 } header: {
                     Text("Add Activity to Day \(dayNumber)")
                 }
                 Section {
                     Button {
-                        let duration = Int(durationText) ?? 60
-                        onAdd(name.trimmingCharacters(in: .whitespaces), description, duration)
+                        onAdd(name.trimmingCharacters(in: .whitespaces), description, 90, selectedTimeBlock)
                         dismiss()
                     } label: {
                         HStack {
