@@ -19,8 +19,8 @@ from backend.config import settings
 # Constants
 # ---------------------------------------------------------------------------
 
-ACCESS_TOKEN_EXPIRE_MINUTES = 15
-REFRESH_TOKEN_EXPIRE_DAYS = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
+REFRESH_TOKEN_EXPIRE_DAYS = 90
 BCRYPT_COST_FACTOR = 12  # ≥10 per Req 11.4
 
 APPLE_JWKS_URL = "https://appleid.apple.com/auth/keys"
