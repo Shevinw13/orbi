@@ -52,7 +52,7 @@ struct DestinationInsightsView: View {
                 }
                 .padding(.vertical, DesignTokens.spacingSM)
             } else if let weather = weatherVM.weather {
-                HStack(spacing: DesignTokens.spacingMD) {
+                VStack(alignment: .leading, spacing: DesignTokens.spacingSM) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Current Weather")
                             .font(.caption2)
@@ -70,7 +70,6 @@ struct DestinationInsightsView: View {
                     }
 
                     Divider()
-                        .frame(height: 40)
                         .overlay(DesignTokens.surfaceGlassBorder)
 
                     VStack(alignment: .leading, spacing: 4) {

@@ -106,7 +106,8 @@ struct TripResultView: View {
             .sheet(isPresented: $showShareSheet) {
                 ShareSheetView(
                     itinerary: itineraryVM.itinerary,
-                    plannedBy: $plannedByText
+                    plannedBy: $plannedByText,
+                    selectedHotel: recommendationsVM.selectedHotel
                 )
             }
             .alert("Share this trip to Explore?", isPresented: $showShareToExplorePrompt) {

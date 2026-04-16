@@ -1,10 +1,13 @@
 import SwiftUI
+import PhotosUI
 
 // MARK: - Main Content View (Custom Floating Tab Bar)
 
 struct ContentView: View {
     @ObservedObject var authService: AuthService
     @State private var selectedTab: AppTab = .plan
+    @State private var showUsernamePrompt: Bool = false
+    @State private var usernameInput: String = ""
 
     var body: some View {
         ZStack {
@@ -25,6 +28,76 @@ struct ContentView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .onAppear {
+            if authService.isAuthenticated && authService.username == nil {
+                showUsernamePrompt = true
+            }
+        }
+        .onChange(of: authService.isAuthenticated) { _, isAuth in
+            if isAuth && authService.username == nil {
+                showUsernamePrompt = true
+            }
+        }
+        .sheet(isPresented: $showUsernamePrompt) {
+            UsernamePromptView(
+                username: $usernameInput,
+                onContinue: {
+                    authService.setUsername(usernameInput)
+                    showUsernamePrompt = false
+                }
+            )
+            .interactiveDismissDisabled()
+        }
+    }
+}
+
+// MARK: - Username Prompt View
+
+struct UsernamePromptView: View {
+    @Binding var username: String
+    let onContinue: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                DesignTokens.backgroundPrimary.ignoresSafeArea()
+                VStack(spacing: 24) {
+                    Spacer()
+                    Image(systemName: "person.badge.plus")
+                        .font(.system(size: 56))
+                        .foregroundStyle(DesignTokens.accentCyan)
+                    Text("Choose a username")
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(DesignTokens.textPrimary)
+                    Text("This is how other travelers will find you.")
+                        .font(.subheadline)
+                        .foregroundStyle(DesignTokens.textSecondary)
+                        .multilineTextAlignment(.center)
+                    TextField("username", text: $username)
+                        .textFieldStyle(.roundedBorder)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .padding(.horizontal, 40)
+                        .onChange(of: username) { _, newValue in
+                            if newValue.count > 30 { username = String(newValue.prefix(30)) }
+                        }
+                    Button(action: onContinue) {
+                        Text("Continue")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 15)
+                            .background(DesignTokens.accentGradient)
+                            .clipShape(RoundedRectangle(cornerRadius: DesignTokens.radiusMD))
+                    }
+                    .disabled(username.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .opacity(username.trimmingCharacters(in: .whitespaces).isEmpty ? 0.5 : 1)
+                    .padding(.horizontal, 40)
+                    Spacer()
+                    Spacer()
+                }
+            }
+        }
     }
 }
 
@@ -70,6 +143,7 @@ private struct FloatingTabBar: View {
         .padding(.bottom, DesignTokens.spacingSM)
     }
 }
+
 
 // MARK: - Plan Tab
 
@@ -184,492 +258,210 @@ class PrefsViewModelHolder: ObservableObject {
     var vm: TripPreferencesViewModel?
 }
 
-// MARK: - City Card (Glassmorphic Dark Theme)
+// MARK: - Saved Trips Tab
+
+struct SavedTripsTab: View {
+    @Binding var selectedTab: AppTab
+
+    var body: some View {
+        SavedTripsView(onPlanTrip: {
+            selectedTab = .plan
+        })
+    }
+}
+
+// MARK: - Profile Tab (FIX 1 & 3)
+
+struct ProfileTab: View {
+    @ObservedObject var authService: AuthService
+    @Binding var selectedTab: AppTab
+
+    @State private var isEditingUsername: Bool = false
+    @State private var editedUsername: String = ""
+
+    // Profile photo state (FIX 3)
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var profileImageData: Data?
+
+    private let profileImageKey = "orbi_profile_image_data"
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                DesignTokens.backgroundPrimary.ignoresSafeArea()
+                ScrollView {
+                    VStack(spacing: DesignTokens.spacingLG) {
+                        Spacer().frame(height: 20)
+
+                        // Profile photo (FIX 3)
+                        PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                            if let data = profileImageData, let uiImage = UIImage(data: data) {
+                                Image(uiImage: uiImage)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 90, height: 90)
+                                    .clipShape(Circle())
+                                    .overlay(Circle().stroke(DesignTokens.accentCyan, lineWidth: 2))
+                            } else {
+                                Image(systemName: "person.circle.fill")
+                                    .font(.system(size: 72))
+                                    .foregroundStyle(DesignTokens.textSecondary)
+                            }
+                        }
+                        .onChange(of: selectedPhotoItem) { _, newItem in
+                            Task {
+                                if let data = try? await newItem?.loadTransferable(type: Data.self) {
+                                    profileImageData = data
+                                    UserDefaults.standard.set(data, forKey: profileImageKey)
+                                }
+                            }
+                        }
+                        .accessibilityLabel("Change profile photo")
+
+                        // Username display (FIX 1: no user ID shown)
+                        VStack(spacing: 6) {
+                            if isEditingUsername {
+                                HStack {
+                                    TextField("Username", text: $editedUsername)
+                                        .textFieldStyle(.roundedBorder)
+                                        .textInputAutocapitalization(.never)
+                                        .autocorrectionDisabled()
+                                        .frame(maxWidth: 200)
+                                        .onChange(of: editedUsername) { _, newValue in
+                                            if newValue.count > 30 { editedUsername = String(newValue.prefix(30)) }
+                                        }
+                                    Button("Save") {
+                                        authService.setUsername(editedUsername)
+                                        isEditingUsername = false
+                                    }
+                                    .foregroundStyle(DesignTokens.accentCyan)
+                                    .disabled(editedUsername.trimmingCharacters(in: .whitespaces).isEmpty)
+                                }
+                            } else {
+                                Text(authService.username ?? authService.displayName ?? "Traveler")
+                                    .font(.title2.weight(.bold))
+                                    .foregroundStyle(DesignTokens.textPrimary)
+                                Button("Edit username") {
+                                    editedUsername = authService.username ?? ""
+                                    isEditingUsername = true
+                                }
+                                .font(.caption)
+                                .foregroundStyle(DesignTokens.accentCyan)
+                            }
+                        }
+
+                        // My Trips button (FIX 1: only one trips link)
+                        Button {
+                            selectedTab = .trips
+                        } label: {
+                            HStack {
+                                Image(systemName: "suitcase.fill")
+                                Text("My Trips")
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                            }
+                            .font(.body.weight(.medium))
+                            .foregroundStyle(DesignTokens.textPrimary)
+                            .padding(DesignTokens.spacingMD)
+                            .glassmorphic(cornerRadius: DesignTokens.radiusMD)
+                        }
+                        .padding(.horizontal, DesignTokens.spacingMD)
+
+                        // Sign Out
+                        Button {
+                            authService.signOut()
+                        } label: {
+                            Text("Sign Out")
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(.red)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(Color.red.opacity(0.1))
+                                .clipShape(RoundedRectangle(cornerRadius: DesignTokens.radiusMD))
+                        }
+                        .padding(.horizontal, DesignTokens.spacingMD)
+
+                        Spacer()
+                    }
+                }
+            }
+            .navigationTitle("Profile")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(DesignTokens.backgroundPrimary, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .onAppear {
+                profileImageData = UserDefaults.standard.data(forKey: profileImageKey)
+            }
+        }
+    }
+}
+
+// MARK: - Missing Stub Views
 
 struct CityCardView: View {
     let city: CityMarker
     let onPlanTrip: () -> Void
     let onDismiss: () -> Void
 
-    @State private var imageURL: URL?
-
     var body: some View {
-        VStack(spacing: DesignTokens.spacingMD) {
+        VStack(spacing: DesignTokens.spacingSM) {
             HStack {
-                Spacer()
-                Button(action: onDismiss) {
-                    Image(systemName: "xmark")
-                        .font(.caption.weight(.bold))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(city.name)
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(DesignTokens.textPrimary)
+                    Text("Tap to plan your trip")
+                        .font(.caption)
                         .foregroundStyle(DesignTokens.textSecondary)
-                        .padding(6)
-                        .background(Color.white.opacity(0.1))
-                        .clipShape(Circle())
+                }
+                Spacer()
+                Button { onDismiss() } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(DesignTokens.textSecondary)
                 }
             }
-
-            ZStack {
-                RoundedRectangle(cornerRadius: DesignTokens.radiusMD)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                DesignTokens.accentCyan.opacity(0.3),
-                                DesignTokens.accentBlue.opacity(0.2),
-                                DesignTokens.backgroundSecondary,
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(height: 140)
-
-                if let url = imageURL {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(height: 140)
-                                .clipShape(RoundedRectangle(cornerRadius: DesignTokens.radiusMD))
-                        default:
-                            ProgressView().tint(DesignTokens.accentCyan)
-                        }
-                    }
-                } else {
-                    Image(systemName: "mappin.circle.fill")
-                        .font(.system(size: 36))
-                        .foregroundStyle(DesignTokens.accentCyan)
-                }
-            }
-            .frame(height: 140)
-            .clipShape(RoundedRectangle(cornerRadius: DesignTokens.radiusMD))
-
-            Text(city.name)
-                .font(.title2.weight(.bold))
-                .foregroundStyle(DesignTokens.textPrimary)
-
-            HStack(spacing: DesignTokens.spacingSM) {
-                HStack(spacing: 3) {
-                    Image(systemName: "star.fill").foregroundStyle(.yellow)
-                    Text("4.8").fontWeight(.semibold).foregroundStyle(DesignTokens.textPrimary)
-                }
-                .font(.subheadline)
-                Text("·").foregroundStyle(DesignTokens.textSecondary)
-                Text(city.name).foregroundStyle(DesignTokens.textSecondary).font(.subheadline)
-            }
-
-            DestinationInsightsView(latitude: city.latitude, longitude: city.longitude)
-
             Button(action: onPlanTrip) {
                 Text("Plan Trip")
                     .font(.headline)
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 15)
+                    .padding(.vertical, 12)
                     .background(DesignTokens.accentGradient)
-                    .clipShape(RoundedRectangle(cornerRadius: DesignTokens.radiusMD))
-                    .shadow(color: DesignTokens.accentCyan.opacity(0.3), radius: 8, y: 4)
-            }
-        }
-        .padding(22)
-        .glassmorphic(cornerRadius: DesignTokens.radiusXL)
-        .shadow(color: Color.black.opacity(0.4), radius: 20, y: 8)
-        .task { await loadCityImage() }
-    }
-
-    private func loadCityImage() async {
-        let searchTerms = [city.name, "\(city.name) city", "\(city.name)_(city)"]
-        for term in searchTerms {
-            let encoded = term.replacingOccurrences(of: " ", with: "_")
-                .addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? term
-            guard let url = URL(string: "https://en.wikipedia.org/api/rest_v1/page/summary/\(encoded)") else { continue }
-            do {
-                let (data, response) = try await URLSession.shared.data(from: url)
-                guard let httpResp = response as? HTTPURLResponse, httpResp.statusCode == 200 else { continue }
-                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let originalImage = json["originalimage"] as? [String: Any],
-                   let source = originalImage["source"] as? String,
-                   let imgURL = URL(string: source) {
-                    imageURL = imgURL; return
-                }
-                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let thumbnail = json["thumbnail"] as? [String: Any],
-                   let source = thumbnail["source"] as? String,
-                   let imgURL = URL(string: source) {
-                    imageURL = imgURL; return
-                }
-            } catch { continue }
-        }
-    }
-}
-
-// MARK: - Preferences Overlay
-
-struct PreferencesOverlay: View {
-    @ObservedObject var viewModel: TripPreferencesViewModel
-    let onClose: () -> Void
-    let onGenerate: () -> Void
-    let onItineraryReady: () -> Void
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Spacer()
-            ScrollView {
-                VStack(spacing: 18) {
-                    HStack {
-                        Button(action: onClose) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "chevron.left")
-                                Text("Back")
-                            }
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(DesignTokens.accentCyan)
-                        }
-                        Spacer()
-                    }
-
-                    // City header
-                    VStack(spacing: DesignTokens.spacingSM) {
-                        ZStack {
-                            Circle()
-                                .fill(LinearGradient(colors: [DesignTokens.accentCyan.opacity(0.15), DesignTokens.accentBlue.opacity(0.08)], startPoint: .top, endPoint: .bottom))
-                                .frame(width: 60, height: 60)
-                            Image(systemName: "mappin.circle.fill")
-                                .font(.system(size: 34))
-                                .foregroundStyle(DesignTokens.accentCyan)
-                        }
-                        Text(viewModel.city.name)
-                            .font(.title3.weight(.bold))
-                            .foregroundStyle(DesignTokens.textPrimary)
-                        Text("Plan a trip to \(viewModel.city.name)?")
-                            .font(.subheadline)
-                            .foregroundStyle(DesignTokens.textSecondary)
-                    }
-
-                    // Trip Length
-                    VStack(spacing: 0) {
-                        settingsRow(label: "Trip Length") {
-                            HStack(spacing: 4) {
-                                TextField("5", text: $viewModel.daysText)
-                                    .keyboardType(.numberPad)
-                                    .multilineTextAlignment(.trailing)
-                                    .frame(width: 28)
-                                    .fontWeight(.semibold)
-                                    .foregroundStyle(DesignTokens.textPrimary)
-                                Text("Days").foregroundStyle(DesignTokens.textSecondary)
-                                Image(systemName: "chevron.right").font(.caption2).foregroundStyle(DesignTokens.textTertiary)
-                            }
-                        }
-                    }
-                    .background(Color.white.opacity(0.05))
                     .clipShape(RoundedRectangle(cornerRadius: DesignTokens.radiusSM))
-                    .overlay(RoundedRectangle(cornerRadius: DesignTokens.radiusSM).stroke(DesignTokens.surfaceGlassBorder, lineWidth: 0.5))
-
-                    // Budget Tier
-                    budgetTierSection
-
-                    // Vibe pills (multi-select)
-                    vibeSection
-
-                    // Family Friendly toggle
-                    Toggle(isOn: $viewModel.familyFriendly) {
-                        HStack(spacing: DesignTokens.spacingSM) {
-                            Image(systemName: "figure.and.child.holdinghands")
-                                .foregroundStyle(DesignTokens.accentCyan)
-                            Text("Family Friendly")
-                                .font(.subheadline.weight(.medium))
-                                .foregroundStyle(DesignTokens.textPrimary)
-                        }
-                    }
-                    .tint(DesignTokens.accentCyan)
-                    .padding(.horizontal, DesignTokens.spacingMD)
-
-                    // Generate button
-                    Button {
-                        Task {
-                            onGenerate()
-                            await viewModel.submit()
-                            if viewModel.generatedItinerary != nil {
-                                onItineraryReady()
-                            }
-                        }
-                    } label: {
-                        HStack(spacing: DesignTokens.spacingSM) {
-                            Image(systemName: "sparkles")
-                            Text("Generate Itinerary").fontWeight(.semibold)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 15)
-                        .background(DesignTokens.accentGradient)
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.radiusMD))
-                        .shadow(color: DesignTokens.accentCyan.opacity(0.3), radius: 8, y: 4)
-                    }
-                    .disabled(!viewModel.canSubmit)
-                    .opacity(viewModel.canSubmit ? 1 : 0.5)
-
-                    HStack(spacing: DesignTokens.spacingXS) {
-                        Image(systemName: "sparkles").font(.caption2)
-                        Text("Our travel experts are crafting your perfect itinerary").font(.caption)
-                    }
-                    .foregroundStyle(DesignTokens.textSecondary)
-                }
-                .padding(22)
-                .glassmorphic(cornerRadius: DesignTokens.radiusXL)
-                .padding(.horizontal, 10)
-            }
-            .padding(.bottom, DesignTokens.tabBarHeight + DesignTokens.spacingSM)
-        }
-    }
-
-    // MARK: - Budget Tier Section
-
-    private var budgetTierSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Budget Tier")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(DesignTokens.textSecondary)
-
-            HStack(spacing: DesignTokens.spacingSM) {
-                ForEach(BudgetTier.allCases) { tier in
-                    let isSelected = viewModel.selectedBudgetTier == tier
-                    Text(tier.apiValue)
-                        .font(.subheadline.weight(.medium))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(
-                            Group {
-                                if isSelected {
-                                    Capsule().fill(DesignTokens.accentGradient)
-                                } else {
-                                    Capsule().stroke(DesignTokens.surfaceGlassBorder, lineWidth: 1)
-                                }
-                            }
-                        )
-                        .foregroundStyle(isSelected ? .white : DesignTokens.textSecondary)
-                        .clipShape(Capsule())
-                        .onTapGesture { viewModel.selectedBudgetTier = tier }
-                }
-            }
-
-            Text(viewModel.selectedBudgetTier.label)
-                .font(.caption)
-                .foregroundStyle(DesignTokens.accentCyan)
-        }
-    }
-
-    // MARK: - Vibe Section (multi-select)
-
-    private var vibeSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Vibe")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(DesignTokens.textSecondary)
-                if viewModel.selectedVibes.isEmpty {
-                    Text("(select at least one)")
-                        .font(.caption2)
-                        .foregroundStyle(.red.opacity(0.8))
-                }
-            }
-            HStack(spacing: 6) {
-                ForEach(TripVibe.allCases) { vibe in
-                    vibePill(vibe)
-                }
             }
         }
-    }
-
-    private func vibePill(_ vibe: TripVibe) -> some View {
-        let isSelected = viewModel.selectedVibes.contains(vibe)
-        return HStack(spacing: 4) {
-            Image(systemName: vibe.icon).font(.caption2)
-            Text(vibe.rawValue)
-        }
-        .font(.caption.weight(.semibold))
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
-        .background(
-            Group {
-                if isSelected {
-                    Capsule().fill(DesignTokens.accentGradient)
-                } else {
-                    Capsule().stroke(DesignTokens.surfaceGlassBorder, lineWidth: 1)
-                }
-            }
-        )
-        .foregroundStyle(isSelected ? .white : DesignTokens.textSecondary)
-        .clipShape(Capsule())
-        .shadow(color: isSelected ? DesignTokens.accentCyan.opacity(0.3) : .clear, radius: 4, y: 2)
-        .onTapGesture {
-            if isSelected {
-                viewModel.selectedVibes.remove(vibe)
-            } else {
-                viewModel.selectedVibes.insert(vibe)
-            }
-        }
-    }
-
-    private func settingsRow<Content: View>(label: String, @ViewBuilder content: () -> Content) -> some View {
-        HStack {
-            Text(label).font(.subheadline).foregroundStyle(DesignTokens.textPrimary)
-            Spacer()
-            content().font(.subheadline)
-        }
-        .padding(.horizontal, DesignTokens.spacingMD)
-        .padding(.vertical, 14)
+        .padding(DesignTokens.spacingMD)
+        .glassmorphic(cornerRadius: DesignTokens.radiusMD)
     }
 }
-
-// MARK: - Generating Overlay
 
 struct GeneratingOverlay: View {
     let cityName: String
-    @State private var glowOpacity: Double = 0.3
-    @State private var messageIndex: Int = 0
-
-    private let stagedMessages = [
-        "Finding top spots…",
-        "Optimizing your route…",
-        "Finalizing your itinerary…"
-    ]
 
     var body: some View {
-        ZStack {
-            Color.black.opacity(0.5).ignoresSafeArea()
-            VStack(spacing: DesignTokens.spacingLG) {
-                Spacer()
-                ZStack {
-                    Circle()
-                        .fill(RadialGradient(colors: [DesignTokens.accentCyan.opacity(0.6), Color.clear], center: .center, startRadius: 10, endRadius: 80))
-                        .frame(width: 160, height: 160)
-                        .opacity(glowOpacity)
-                    Image(systemName: "mappin.circle.fill")
-                        .font(.system(size: 44))
-                        .foregroundStyle(DesignTokens.accentCyan)
-                }
-                Text(cityName).font(.title3.weight(.bold)).foregroundStyle(DesignTokens.textPrimary).padding(.horizontal, 16)
-                Text(stagedMessages[messageIndex])
-                    .font(.title.weight(.bold))
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(DesignTokens.textPrimary)
-                    .padding(.horizontal, 16)
-                    .animation(.easeInOut(duration: 0.3), value: messageIndex)
-                Text("Our travel professionals are planning your perfect trip")
-                    .font(.subheadline)
-                    .foregroundStyle(DesignTokens.textSecondary)
-                    .padding(.horizontal, 16)
-                ProgressView().tint(DesignTokens.accentCyan).scaleEffect(1.3).padding(.top, DesignTokens.spacingXS)
-                Spacer()
-            }
-        }
-        .onAppear {
-            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) { glowOpacity = 0.8 }
-        }
-        .task {
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 3_000_000_000)
-                guard !Task.isCancelled else { break }
-                messageIndex = (messageIndex + 1) % stagedMessages.count
-            }
+        VStack(spacing: 24) {
+            Spacer()
+            ProgressView()
+                .tint(DesignTokens.accentCyan)
+                .scaleEffect(1.5)
+            Text("Generating itinerary for \(cityName)…")
+                .font(.headline)
+                .foregroundStyle(DesignTokens.textPrimary)
+            Spacer()
         }
     }
 }
 
-// MARK: - Tabs
-
-struct SavedTripsTab: View {
-    @State private var showTrips = false
-    @Binding var selectedTab: AppTab
-
+struct OfflineBannerView: View {
     var body: some View {
-        ZStack { DesignTokens.backgroundPrimary.ignoresSafeArea() }
-            .onAppear { showTrips = true }
-            .sheet(isPresented: $showTrips) {
-                SavedTripsView(onPlanTrip: { selectedTab = .plan })
-            }
-    }
-}
-
-struct ProfileTab: View {
-    @ObservedObject var authService: AuthService
-    @Binding var selectedTab: AppTab
-    @State private var username: String = ""
-    @State private var isEditingUsername: Bool = false
-    @State private var usernameError: String?
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    HStack(spacing: 14) {
-                        Image(systemName: "person.circle.fill").font(.system(size: 48)).foregroundStyle(DesignTokens.accentCyan)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(authService.displayName ?? authService.userId ?? "User").font(.headline).foregroundStyle(DesignTokens.textPrimary)
-                            if !username.isEmpty {
-                                Text("@\(username)").font(.subheadline).foregroundStyle(DesignTokens.textSecondary)
-                            }
-                        }
-                    }
-                    .padding(.vertical, 8)
-                }
-                Section("Username") {
-                    if isEditingUsername {
-                        HStack {
-                            TextField("Set username (max 30)", text: $username)
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled()
-                                .onChange(of: username) { _, newValue in
-                                    if newValue.count > 30 { username = String(newValue.prefix(30)) }
-                                }
-                            Button("Save") {
-                                isEditingUsername = false
-                            }
-                            .foregroundStyle(DesignTokens.accentCyan)
-                            .disabled(username.trimmingCharacters(in: .whitespaces).isEmpty)
-                        }
-                    } else {
-                        HStack {
-                            Text(username.isEmpty ? "No username set" : "@\(username)")
-                                .foregroundStyle(username.isEmpty ? DesignTokens.textTertiary : DesignTokens.textPrimary)
-                            Spacer()
-                            Button(username.isEmpty ? "Set" : "Edit") { isEditingUsername = true }
-                                .foregroundStyle(DesignTokens.accentCyan)
-                        }
-                    }
-                    if let error = usernameError {
-                        Text(error).font(.caption).foregroundStyle(.red)
-                    }
-                }
-                Section {
-                    NavigationLink { SavedTripsView(onPlanTrip: { selectedTab = .plan }) } label: { Label("Saved Trips", systemImage: "suitcase") }
-                    Button { selectedTab = .trips } label: { Label("My Trips", systemImage: "map").foregroundStyle(DesignTokens.textPrimary) }
-                }
-                Section {
-                    Button(role: .destructive) { authService.signOut() } label: { Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right") }
-                }
-            }
-            .navigationTitle("Profile")
-            .scrollContentBackground(.hidden)
-            .background(DesignTokens.backgroundPrimary)
-        }
-    }
-}
-
-private struct OfflineBannerView: View {
-    var body: some View {
-        HStack(spacing: DesignTokens.spacingSM) {
-            Image(systemName: "wifi.slash").font(.subheadline)
-            Text("You're offline").font(.caption.weight(.medium))
+        HStack(spacing: 8) {
+            Image(systemName: "wifi.slash")
+            Text("You're offline")
+                .font(.caption.weight(.medium))
         }
         .foregroundStyle(.white)
-        .padding(.horizontal, DesignTokens.spacingMD)
-        .padding(.vertical, DesignTokens.spacingSM)
+        .padding(.vertical, 6)
         .frame(maxWidth: .infinity)
         .background(Color.red.opacity(0.8))
     }
 }
-
-extension AppTab: Hashable {}
-
-#Preview { ContentView(authService: AuthService.shared) }

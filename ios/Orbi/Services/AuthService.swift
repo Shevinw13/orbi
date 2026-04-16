@@ -13,6 +13,7 @@ final class AuthService: ObservableObject {
     @Published var isAuthenticated = false
     @Published var userId: String?
     @Published var displayName: String?
+    @Published var username: String?
     @Published var isLoading = false
     @Published var errorMessage: String?
 
@@ -101,6 +102,11 @@ final class AuthService: ObservableObject {
         isAuthenticated = false
         userId = nil
         displayName = nil
+        username = nil
+    }
+
+    func setUsername(_ newUsername: String) {
+        username = newUsername
     }
 
     // MARK: - Private Helpers
@@ -120,6 +126,7 @@ final class AuthService: ObservableObject {
 
             userId = response.userId
             displayName = response.name
+            username = response.username
             isAuthenticated = true
         } catch {
             errorMessage = (error as? APIError)?.errorDescription

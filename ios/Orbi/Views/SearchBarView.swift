@@ -112,9 +112,6 @@ struct SearchBarView: View {
                 }
 
                 Spacer()
-
-                Image(systemName: "slider.horizontal.3")
-                    .foregroundStyle(.white.opacity(0.6))
             }
             .padding(.horizontal, 14)
             .frame(height: DesignTokens.searchBarHeight)

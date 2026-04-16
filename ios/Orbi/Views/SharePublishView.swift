@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 // MARK: - Share Publish ViewModel
 
@@ -21,7 +22,6 @@ final class SharePublishViewModel: ObservableObject {
     let availableTags = ["food", "nightlife", "outdoors", "family"]
 
     var canSubmit: Bool {
-        !coverPhotoURL.trimmingCharacters(in: .whitespaces).isEmpty &&
         !title.trimmingCharacters(in: .whitespaces).isEmpty &&
         title.count <= 100 &&
         !description.trimmingCharacters(in: .whitespaces).isEmpty &&
@@ -73,6 +73,8 @@ struct SharePublishView: View {
     let tripDestination: String
     @StateObject private var viewModel = SharePublishViewModel()
     @Environment(\.dismiss) private var dismiss
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var coverImageData: Data?
 
     var body: some View {
         NavigationStack {
@@ -103,13 +105,43 @@ struct SharePublishView: View {
     private var publishForm: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DesignTokens.spacingMD) {
-                // Cover Photo URL
+                // Cover Photo (optional)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Cover Photo URL").font(.subheadline.weight(.medium)).foregroundStyle(DesignTokens.textSecondary)
-                    TextField("https://example.com/photo.jpg", text: $viewModel.coverPhotoURL)
+                    Text("Cover Photo (optional)").font(.subheadline.weight(.medium)).foregroundStyle(DesignTokens.textSecondary)
+
+                    PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                        if let data = coverImageData, let uiImage = UIImage(data: data) {
+                            Image(uiImage: uiImage)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 120)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                        } else {
+                            HStack {
+                                Image(systemName: "photo.on.rectangle.angled")
+                                Text("Select a photo")
+                            }
+                            .foregroundStyle(DesignTokens.accentCyan)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 60)
+                            .background(Color.white.opacity(0.05))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                    }
+                    .onChange(of: selectedPhotoItem) { _, newItem in
+                        Task {
+                            if let data = try? await newItem?.loadTransferable(type: Data.self) {
+                                coverImageData = data
+                            }
+                        }
+                    }
+
+                    TextField("Or paste a URL (optional)", text: $viewModel.coverPhotoURL)
                         .textFieldStyle(.roundedBorder)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
+                        .font(.caption)
                 }
 
                 // Title

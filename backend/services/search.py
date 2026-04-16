@@ -66,7 +66,7 @@ async def search_destinations(query: str) -> list[dict[str, Any]]:
         logger.warning("Nominatim request failed for query=%s", query)
         return []
 
-    results = [
+    raw_results = [
         {
             "name": item.get("display_name", ""),
             "place_id": str(item.get("place_id", "")),
@@ -76,6 +76,15 @@ async def search_destinations(query: str) -> list[dict[str, Any]]:
         for item in data
         if item.get("type") in _CITY_TYPES or item.get("class") == "place"
     ]
+
+    # Deduplicate by city name (first part before the comma)
+    seen_cities: set[str] = set()
+    results: list[dict[str, Any]] = []
+    for r in raw_results:
+        city_name = r["name"].split(",")[0].strip().lower()
+        if city_name not in seen_cities:
+            seen_cities.add(city_name)
+            results.append(r)
 
     set_cached(cache_k, results, CACHE_TTL)
     return results

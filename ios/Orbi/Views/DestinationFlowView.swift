@@ -346,9 +346,9 @@ struct DestinationFlowView: View {
                             Image(systemName: vibe.icon)
                                 .font(.caption2)
                             Text(vibe.rawValue)
-                                .font(.subheadline.weight(.medium))
+                                .font(.system(size: 11, weight: .semibold))
                         }
-                        .padding(.horizontal, 12)
+                        .padding(.horizontal, 10)
                         .padding(.vertical, 8)
                         .background(
                             isSelected

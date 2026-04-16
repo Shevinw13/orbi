@@ -40,4 +40,5 @@ struct AuthResponse: Decodable {
     let expiresIn: Int
     let userId: String
     let name: String?
+    let username: String?
 }

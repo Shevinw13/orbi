@@ -6,6 +6,7 @@ struct ShareSheetView: View {
 
     let itinerary: ItineraryResponse
     @Binding var plannedBy: String
+    var selectedHotel: PlaceRecommendation? = nil
     @State private var notes: String = ""
     @State private var showActivitySheet: Bool = false
     @Environment(\.dismiss) private var dismiss
@@ -94,7 +95,8 @@ struct ShareSheetView: View {
                         ShareFormatter.formatTrip(
                             itinerary,
                             plannedBy: plannedBy.isEmpty ? nil : plannedBy,
-                            notes: notes.isEmpty ? nil : notes
+                            notes: notes.isEmpty ? nil : notes,
+                            hotel: selectedHotel
                         )
                     ]
                 )
@@ -113,6 +115,7 @@ struct ShareSheetView: View {
             days: [],
             reasoningText: nil
         ),
-        plannedBy: .constant("")
+        plannedBy: .constant(""),
+        selectedHotel: nil
     )
 }

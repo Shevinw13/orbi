@@ -117,8 +117,9 @@ Vibes: {vibes_str}
 
 RULES:
 - Each day has 3 time blocks: Morning, Afternoon, Evening.
-- Generate 3-5 items per day (activities + meals combined), soft cap 6.
-- Each day MUST include meals: Breakfast (Morning), Lunch (Afternoon), Dinner (Evening).
+- Each time block MUST have at least 1 activity (not counting meals). Generate 2-3 activities per day minimum.
+- Each day MUST also include 3 meals: Breakfast (Morning), Lunch (Afternoon), Dinner (Evening).
+- Total items per day should be 5-6 (2-3 activities + 3 meals).
 - For Breakfast: Include a highly-rated breakfast spot known for morning dining.
 - For Lunch: Include a popular lunch restaurant with good midday options.
 - For Dinner: Include a top-rated dinner restaurant with evening ambiance.

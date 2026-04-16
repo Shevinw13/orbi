@@ -9,7 +9,8 @@ struct ShareFormatter {
     static func formatTrip(
         _ itinerary: ItineraryResponse,
         plannedBy: String? = nil,
-        notes: String? = nil
+        notes: String? = nil,
+        hotel: PlaceRecommendation? = nil
     ) -> String {
         var lines: [String] = []
         var totalCost: Double = 0
@@ -21,6 +22,12 @@ struct ShareFormatter {
 
         if let plannedBy = plannedBy?.trimmingCharacters(in: .whitespacesAndNewlines), !plannedBy.isEmpty {
             lines.append("Planned by \(plannedBy)")
+        }
+
+        // Hotel info
+        if let hotel = hotel {
+            let price = PriceFormatter.hotelPrice(min: hotel.priceRangeMin, max: hotel.priceRangeMax, tier: hotel.priceLevel)
+            lines.append("Hotel: \(hotel.name) (\(price))")
         }
 
         lines.append("")
