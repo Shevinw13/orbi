@@ -421,8 +421,10 @@ async def refresh_access_token(raw_refresh_token: str) -> dict[str, Any]:
 
     return {
         "access_token": access_token,
-        "refresh_token": raw_refresh_token,  # same refresh token stays valid
+        "refresh_token": raw_refresh_token,
         "token_type": "bearer",
         "expires_in": expires_in,
         "user_id": matched_row["user_id"],
+        "name": None,
+        "username": None,
     }
