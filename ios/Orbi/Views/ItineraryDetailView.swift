@@ -272,7 +272,7 @@ struct ItineraryDetailView: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 15)
-            .background(viewModel.hasSaved ? Color.green : DesignTokens.accentGradient)
+            .background(viewModel.hasSaved ? AnyShapeStyle(Color.green) : AnyShapeStyle(DesignTokens.accentGradient))
             .foregroundStyle(.white)
             .clipShape(RoundedRectangle(cornerRadius: DesignTokens.radiusMD))
             .shadow(color: DesignTokens.accentCyan.opacity(0.3), radius: 8, y: 4)
