@@ -157,68 +157,68 @@ async def publish_shared_itinerary(
     description: str,
     destination: str,
     budget_level: int,
-    cover_photo_url: str,
+    cover_photo_url: str = "",
     tags: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Validate ownership, quality gate, snapshot itinerary into shared_itineraries."""
+    """Publish a trip to the shared itineraries explore feed.
+
+    Completely rewritten — minimal, defensive, no quality gates.
+    """
     sb = _get_supabase()
 
-    # Validate user owns the trip
-    trip_result = sb.table("trips").select("*").eq("id", source_trip_id).execute()
+    # Step 1: Fetch the source trip
+    logger.info("PUBLISH: fetching trip %s for user %s", source_trip_id, user_id)
+    try:
+        trip_result = sb.table("trips").select("*").eq("id", source_trip_id).execute()
+    except Exception as e:
+        logger.error("PUBLISH: failed to fetch trip: %s", e)
+        raise RuntimeError(f"Failed to fetch trip: {e}")
+
     if not trip_result.data:
+        logger.error("PUBLISH: trip %s not found", source_trip_id)
         raise ValueError("Trip not found")
 
     trip = trip_result.data[0]
-    if trip["user_id"] != user_id:
+    logger.info("PUBLISH: trip found, user_id=%s, destination=%s", trip.get("user_id"), trip.get("destination"))
+
+    if str(trip["user_id"]) != str(user_id):
+        logger.error("PUBLISH: ownership mismatch: trip.user_id=%s != request.user_id=%s", trip["user_id"], user_id)
         raise PermissionError("You do not have access to this trip")
 
-    itinerary = trip.get("itinerary")
-
-    # Create shared itinerary row — skip quality gate, just publish
+    # Step 2: Build the insert row with safe defaults
     row = {
-        "user_id": user_id,
-        "source_trip_id": source_trip_id,
-        "title": title,
-        "description": description,
-        "destination": destination,
-        "destination_lat_lng": trip.get("destination_lat_lng"),
-        "budget_level": budget_level,
-        "cover_photo_url": cover_photo_url if cover_photo_url else None,
-        "tags": tags if tags else [],
-        "num_days": trip.get("num_days") or 1,
-        "itinerary": itinerary,
+        "user_id": str(user_id),
+        "source_trip_id": str(source_trip_id),
+        "title": str(title)[:100],
+        "description": str(description)[:500],
+        "destination": str(destination),
+        "budget_level": int(budget_level),
+        "num_days": int(trip.get("num_days") or 1),
+        "tags": list(tags) if tags else [],
     }
 
-    # Remove None values to let DB defaults handle them
-    row = {k: v for k, v in row.items() if v is not None}
+    # Optional fields — only include if they have values
+    if cover_photo_url and cover_photo_url.strip():
+        row["cover_photo_url"] = str(cover_photo_url).strip()
 
-    logger.info("Publishing shared itinerary row: %s", {k: type(v).__name__ for k, v in row.items()})
+    if trip.get("destination_lat_lng"):
+        row["destination_lat_lng"] = str(trip["destination_lat_lng"])
 
+    if trip.get("itinerary"):
+        row["itinerary"] = trip["itinerary"]
+
+    logger.info("PUBLISH: inserting row with keys: %s", list(row.keys()))
+
+    # Step 3: Insert
     try:
         result = sb.table("shared_itineraries").insert(row).execute()
-    except Exception as insert_exc:
-        logger.error("Supabase insert failed: %s", insert_exc, exc_info=True)
-        raise RuntimeError(f"Database insert failed: {insert_exc}") from insert_exc
+    except Exception as e:
+        logger.error("PUBLISH: Supabase insert FAILED: %s", e, exc_info=True)
+        raise RuntimeError(f"Database insert failed: {e}")
 
     if not result.data:
-        logger.error("Supabase insert returned no data for shared itinerary publish")
-        raise RuntimeError("Failed to publish shared itinerary — no data returned")
+        logger.error("PUBLISH: insert returned empty data")
+        raise RuntimeError("Insert returned no data")
 
+    logger.info("PUBLISH: success, id=%s", result.data[0].get("id"))
     return result.data[0]
-
-
-def _passes_quality_gate(itinerary: dict[str, Any] | None) -> bool:
-    """Check that the itinerary has at least 1 day with at least 1 activity slot."""
-    if not itinerary:
-        return False
-
-    days = itinerary.get("days", [])
-    if not days:
-        return False
-
-    for day in days:
-        slots = day.get("slots", [])
-        if len(slots) >= 1:
-            return True
-
-    return False
