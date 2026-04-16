@@ -70,15 +70,13 @@ struct TripResultView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                DesignTokens.backgroundPrimary.ignoresSafeArea()
-
-                VStack(spacing: 0) {
-                    tripHeader
-                    tabPicker
-                    tabContent
-                }
+            VStack(spacing: 0) {
+                tripHeader
+                tabPicker
+                tabContent
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(DesignTokens.backgroundPrimary.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
