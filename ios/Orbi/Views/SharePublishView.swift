@@ -138,11 +138,6 @@ struct SharePublishView: View {
                         }
                     }
 
-                    TextField("Or paste a URL (optional)", text: $viewModel.coverPhotoURL)
-                        .textFieldStyle(.roundedBorder)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                        .font(.caption)
                 }
 
                 // Title
