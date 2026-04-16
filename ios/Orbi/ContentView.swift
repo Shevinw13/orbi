@@ -1,5 +1,4 @@
 import SwiftUI
-import PhotosUI
 
 // MARK: - Main Content View (Custom Floating Tab Bar)
 
@@ -599,23 +598,23 @@ struct ProfileTab: View {
     @State private var isEditingUsername: Bool = false
     @State private var usernameError: String?
     @State private var profileImageData: Data?
-    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var showImagePicker: Bool = false
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
                     HStack(spacing: 14) {
-                        PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                        Button {
+                            showImagePicker = true
+                        } label: {
                             if let data = profileImageData, let uiImage = UIImage(data: data) {
                                 Image(uiImage: uiImage)
                                     .resizable()
                                     .scaledToFill()
                                     .frame(width: 56, height: 56)
                                     .clipShape(Circle())
-                                    .overlay(
-                                        Circle().stroke(DesignTokens.accentCyan, lineWidth: 2)
-                                    )
+                                    .overlay(Circle().stroke(DesignTokens.accentCyan, lineWidth: 2))
                             } else {
                                 ZStack {
                                     Image(systemName: "person.circle.fill")
@@ -631,13 +630,10 @@ struct ProfileTab: View {
                                 }
                             }
                         }
-                        .onChange(of: selectedPhotoItem) { _, newItem in
-                            Task {
-                                if let data = try? await newItem?.loadTransferable(type: Data.self) {
-                                    profileImageData = data
-                                    // Persist locally
-                                    UserDefaults.standard.set(data, forKey: "profileImageData")
-                                }
+                        .sheet(isPresented: $showImagePicker) {
+                            ImagePickerView { data in
+                                profileImageData = data
+                                UserDefaults.standard.set(data, forKey: "profileImageData")
                             }
                         }
                         VStack(alignment: .leading, spacing: 4) {
@@ -714,5 +710,39 @@ private struct OfflineBannerView: View {
 }
 
 extension AppTab: Hashable {}
+
+// MARK: - UIKit Image Picker Wrapper
+
+struct ImagePickerView: UIViewControllerRepresentable {
+    let onImagePicked: (Data) -> Void
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .photoLibrary
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(onImagePicked: onImagePicked) }
+
+    class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let onImagePicked: (Data) -> Void
+        init(onImagePicked: @escaping (Data) -> Void) { self.onImagePicked = onImagePicked }
+
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            if let image = info[.originalImage] as? UIImage,
+               let data = image.jpegData(compressionQuality: 0.7) {
+                onImagePicked(data)
+            }
+            picker.dismiss(animated: true)
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            picker.dismiss(animated: true)
+        }
+    }
+}
 
 #Preview { ContentView(authService: AuthService.shared) }
