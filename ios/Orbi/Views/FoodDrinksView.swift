@@ -204,6 +204,15 @@ struct FoodDrinksView: View {
                     .font(.subheadline)
                     .foregroundStyle(DesignTokens.textPrimary)
                     .onSubmit { Task { await searchRestaurants() } }
+                if !searchQuery.isEmpty {
+                    Button {
+                        searchQuery = ""
+                        searchResults = []
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(DesignTokens.textTertiary)
+                    }
+                }
                 if isSearching {
                     ProgressView().controlSize(.small).tint(DesignTokens.accentCyan)
                 }
@@ -218,8 +227,18 @@ struct FoodDrinksView: View {
                 }
             }
 
-            ForEach(searchResults) { result in
-                searchResultCard(result)
+            if !searchResults.isEmpty {
+                Text("Results for \"\(searchQuery)\"")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(DesignTokens.accentCyan)
+
+                ForEach(searchResults) { result in
+                    searchResultCard(result)
+                }
+            } else if !searchQuery.isEmpty && !isSearching {
+                Text("No results found")
+                    .font(.caption)
+                    .foregroundStyle(DesignTokens.textTertiary)
             }
         }
     }

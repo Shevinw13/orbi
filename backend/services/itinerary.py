@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
 CACHE_TTL = 86400  # 24 hours
 MAX_TRAVEL_TIME_MIN = 60  # Req 4.8
-PROMPT_VERSION = "v3"  # Bump when prompt changes to invalidate stale cache
+PROMPT_VERSION = "v4"  # Bump when prompt changes to invalidate stale cache
 
 # Budget tier mapping for prompt calibration
 BUDGET_TIER_MAP: dict[str, str] = {
@@ -140,7 +140,7 @@ Return ONLY valid JSON with this exact structure:
       "slots": [
         {{
           "time_slot": "Morning",
-          "activity_name": "Place Name",
+          "activity_name": "Morning Activity Name",
           "description": "Brief description",
           "latitude": 0.0,
           "longitude": 0.0,
@@ -148,12 +148,34 @@ Return ONLY valid JSON with this exact structure:
           "travel_time_to_next_min": 15,
           "estimated_cost_usd": 20.0,
           "tag": "Popular"
+        }},
+        {{
+          "time_slot": "Afternoon",
+          "activity_name": "Afternoon Activity Name",
+          "description": "Brief description",
+          "latitude": 0.0,
+          "longitude": 0.0,
+          "estimated_duration_min": 120,
+          "travel_time_to_next_min": 10,
+          "estimated_cost_usd": 30.0,
+          "tag": "Must-See"
+        }},
+        {{
+          "time_slot": "Evening",
+          "activity_name": "Evening Activity Name",
+          "description": "Brief description",
+          "latitude": 0.0,
+          "longitude": 0.0,
+          "estimated_duration_min": 90,
+          "travel_time_to_next_min": 0,
+          "estimated_cost_usd": 15.0,
+          "tag": "Nightlife"
         }}
       ],
       "meals": [
         {{
           "meal_type": "Breakfast",
-          "restaurant_name": "Restaurant Name",
+          "restaurant_name": "Breakfast Restaurant",
           "cuisine": "Cuisine Type",
           "price_level": "{request.budget_tier}",
           "latitude": 0.0,
@@ -163,7 +185,7 @@ Return ONLY valid JSON with this exact structure:
         }},
         {{
           "meal_type": "Lunch",
-          "restaurant_name": "Restaurant Name",
+          "restaurant_name": "Lunch Restaurant",
           "cuisine": "Cuisine Type",
           "price_level": "{request.budget_tier}",
           "latitude": 0.0,
@@ -173,7 +195,7 @@ Return ONLY valid JSON with this exact structure:
         }},
         {{
           "meal_type": "Dinner",
-          "restaurant_name": "Restaurant Name",
+          "restaurant_name": "Dinner Restaurant",
           "cuisine": "Cuisine Type",
           "price_level": "{request.budget_tier}",
           "latitude": 0.0,
@@ -184,7 +206,9 @@ Return ONLY valid JSON with this exact structure:
       ]
     }}
   ]
-}}"""
+}}
+
+CRITICAL: The "slots" array MUST have exactly 3 objects per day (one Morning, one Afternoon, one Evening). Do NOT combine them into one slot."""
     return prompt
 
 

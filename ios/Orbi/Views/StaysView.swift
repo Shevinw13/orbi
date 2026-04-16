@@ -220,6 +220,15 @@ struct StaysView: View {
                     .onSubmit {
                         Task { await viewModel.searchHotels(query: searchQuery) }
                     }
+                if !searchQuery.isEmpty {
+                    Button {
+                        searchQuery = ""
+                        viewModel.hotelSearchResults = []
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(DesignTokens.textTertiary)
+                    }
+                }
                 if viewModel.isSearchingHotels {
                     ProgressView().controlSize(.small).tint(DesignTokens.accentCyan)
                 }
@@ -234,8 +243,18 @@ struct StaysView: View {
                 }
             }
 
-            ForEach(viewModel.hotelSearchResults) { hotel in
-                hotelCard(hotel)
+            if !viewModel.hotelSearchResults.isEmpty {
+                Text("Results for \"\(searchQuery)\"")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(DesignTokens.accentCyan)
+
+                ForEach(viewModel.hotelSearchResults) { hotel in
+                    hotelCard(hotel)
+                }
+            } else if !searchQuery.isEmpty && !viewModel.isSearchingHotels {
+                Text("No results found")
+                    .font(.caption)
+                    .foregroundStyle(DesignTokens.textTertiary)
             }
         }
     }
