@@ -29,6 +29,8 @@
 	</dict>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Orbi uses your photo library to set a profile picture and cover photos for shared trips.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Orbi uses your location to show nearby destinations and personalize trip recommendations.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
