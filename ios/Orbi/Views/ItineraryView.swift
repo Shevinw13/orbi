@@ -433,7 +433,13 @@ struct ItineraryView: View {
                 }
             }
             .sheet(isPresented: $viewModel.showAddActivity) {
-                AddActivitySheet(dayNumber: viewModel.addActivityDayNumber) { name, desc, duration, timeSlot in
+                let firstSlot = viewModel.itinerary.days.first?.slots.first
+                AddActivitySheet(
+                    dayNumber: viewModel.addActivityDayNumber,
+                    destination: viewModel.itinerary.destination,
+                    latitude: firstSlot?.latitude ?? 0,
+                    longitude: firstSlot?.longitude ?? 0
+                ) { name, desc, duration, timeSlot in
                     viewModel.addActivity(to: viewModel.addActivityDayNumber, name: name, description: desc, durationMin: duration, timeSlot: timeSlot)
                 }
             }

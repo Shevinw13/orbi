@@ -228,7 +228,12 @@ struct TripResultView: View {
             }
         }
         .sheet(isPresented: $itineraryVM.showAddActivity) {
-            AddActivitySheet(dayNumber: itineraryVM.addActivityDayNumber) { name, desc, duration, timeSlot in
+            AddActivitySheet(
+                dayNumber: itineraryVM.addActivityDayNumber,
+                destination: itinerary.destination,
+                latitude: city.latitude,
+                longitude: city.longitude
+            ) { name, desc, duration, timeSlot in
                 itineraryVM.addActivity(to: itineraryVM.addActivityDayNumber, name: name, description: desc, durationMin: duration, timeSlot: timeSlot)
             }
         }
