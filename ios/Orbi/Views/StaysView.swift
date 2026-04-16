@@ -27,6 +27,10 @@ struct StaysView: View {
                 }
                 .padding(.horizontal, DesignTokens.spacingMD)
 
+                // Search at top
+                searchSection
+                    .padding(.horizontal, DesignTokens.spacingMD)
+
                 if viewModel.hotelFiltersBroadened {
                     filtersBroadenedBanner
                         .padding(.horizontal, DesignTokens.spacingMD)
@@ -68,9 +72,6 @@ struct StaysView: View {
                     }
                 }
 
-                // Search fallback
-                searchSection
-                    .padding(.horizontal, DesignTokens.spacingMD)
             }
             .padding(.vertical, DesignTokens.spacingMD)
         }

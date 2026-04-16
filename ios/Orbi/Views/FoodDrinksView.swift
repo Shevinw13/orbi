@@ -26,6 +26,10 @@ struct FoodDrinksView: View {
                 }
                 .padding(.horizontal, DesignTokens.spacingMD)
 
+                // Search at top
+                searchSection
+                    .padding(.horizontal, DesignTokens.spacingMD)
+
                 // Meals grouped by day
                 ForEach(itineraryVM.itinerary.days) { day in
                     if !day.meals.isEmpty {
@@ -49,9 +53,6 @@ struct FoodDrinksView: View {
                     .padding(.vertical, DesignTokens.spacingXL)
                 }
 
-                // Search fallback
-                searchSection
-                    .padding(.horizontal, DesignTokens.spacingMD)
             }
             .padding(.vertical, DesignTokens.spacingMD)
         }

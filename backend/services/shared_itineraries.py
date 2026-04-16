@@ -192,10 +192,15 @@ async def publish_shared_itinerary(
         "itinerary": itinerary or {},
     }
 
-    result = sb.table("shared_itineraries").insert(row).execute()
+    try:
+        result = sb.table("shared_itineraries").insert(row).execute()
+    except Exception as insert_exc:
+        logger.error("Supabase insert failed: %s", insert_exc, exc_info=True)
+        raise RuntimeError(f"Database insert failed: {insert_exc}") from insert_exc
+
     if not result.data:
         logger.error("Supabase insert returned no data for shared itinerary publish")
-        raise RuntimeError("Failed to publish shared itinerary")
+        raise RuntimeError("Failed to publish shared itinerary — no data returned")
 
     return result.data[0]
 
