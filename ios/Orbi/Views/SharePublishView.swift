@@ -51,7 +51,7 @@ final class SharePublishViewModel: ObservableObject {
                     )
                 }
                 group.addTask {
-                    try await Task.sleep(nanoseconds: 30_000_000_000) // 30s timeout
+                    try await Task.sleep(nanoseconds: 90_000_000_000) // 90s timeout
                     throw APIError.unknown(NSError(domain: "Timeout", code: -1))
                 }
                 // Wait for first to complete (either success or timeout)
@@ -101,6 +101,8 @@ struct SharePublishView: View {
                     publishedConfirmation
                 } else {
                     publishForm
+                        .disabled(viewModel.isPublishing)
+                        .opacity(viewModel.isPublishing ? 0.5 : 1)
                 }
             }
             .navigationTitle("Share to Explore")
